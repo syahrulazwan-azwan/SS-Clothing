@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   const M = {};
+  M.UNK = 'Menyusul';
+  M.unkCount = items => items.filter(i => i.ukuran === M.UNK).reduce((s, i) => s + U.num(i.qty), 0);
   M.STATUS = ['Baru', 'Proses', 'Selesai', 'Diambil', 'Batal'];
   M.JENIS_BAYAR = ['DP', 'Pelunasan', 'Cicilan'];
 
@@ -172,11 +174,14 @@
         L.push('');
         if (g.nama) L.push('> *' + g.nama + '*');
         let k = 0;
+        const pakaiNo = o.pakaiNomor === 'Y';
         g.items.forEach(i => {
-          const q = U.num(i.qty);
+          const q = U.num(i.qty), unk = i.ukuran === M.UNK;
           if (i.nama || i.nomor) {
             k++;
-            L.push(k + '. ' + [i.nama || '-', i.ukuran, i.nomor].filter(Boolean).join(' | ') + (q > 1 ? ' | ' + q + ' pcs' : ''));
+            L.push(k + '. ' + [i.nama || '.....', unk ? '.....' : i.ukuran, i.nomor || (pakaiNo && unk ? '.....' : '')].filter(Boolean).join(' | ') + (q > 1 ? ' | ' + q + ' pcs' : ''));
+          } else if (unk) {
+            for (let x = 0; x < q; x++) { k++; L.push(k + '. ..... | .....' + (pakaiNo ? ' | .....' : '')); }
           } else {
             L.push('- ' + (i.ukuran || '-') + (q > 1 ? ' : ' + q + ' pcs' : ''));
           }
@@ -184,6 +189,8 @@
       });
       L.push('');
       L.push('Total: ' + c.qty + ' pcs');
+      const kurang = M.unkCount(c.items);
+      if (kurang) { L.push(''); L.push('*Masih ada ' + kurang + ' data yang belum lengkap* (yang bertanda .....), mohon dilengkapi ya Kak.'); }
       L.push('');
       L.push('Mohon dicek kembali nama, ukuran' + (o.pakaiNomor === 'Y' || c.items.some(i => i.nomor) ? ', dan nomor punggung' : '') + 'nya ya Kak. Kalau sudah sesuai, balas *OK* supaya bisa langsung kami proses 🙏🏻');
     } else if (kind === 'rincian') {
@@ -195,7 +202,7 @@
       groups.forEach(g => {
         L.push('');
         if (g.nama) L.push('> *' + g.nama + '*');
-        rows.filter(r => r.ket === g.nama).forEach(r => L.push('- ' + r.ukuran + ' : ' + r.qty + ' x ' + n(r.harga) + ' = ' + n(r.jumlah) + (r.harga ? '' : ' (gratis)')));
+        rows.filter(r => r.ket === g.nama).forEach(r => L.push('- ' + (r.ukuran === M.UNK ? 'Ukuran menyusul' : r.ukuran) + ' : ' + r.qty + ' x ' + n(r.harga) + ' = ' + n(r.jumlah) + (r.harga ? '' : ' (gratis)')));
       });
       if (c.diskon || c.ongkir) {
         L.push('');

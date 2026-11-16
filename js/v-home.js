@@ -24,7 +24,7 @@
     const done = ['Selesai', 'Diambil', 'Batal'].indexOf(o.status) >= 0;
     const dlTxt = o.deadline && !done ? (dl < 0 ? '<span class="late">lewat ' + (-dl) + ' hr</span>' : dl === 0 ? '<span class="late">hari ini</span>' : dl + ' hr lagi') : '';
     return '<a class="orow" href="#/pesanan/' + e(o.id) + '">' +
-      '<div class="o-main"><div class="o-top"><b>' + e(o.pelanggan) + '</b>' + badge(c.payStatus) + badge(o.status || 'Baru') + '</div>' +
+      '<div class="o-main"><div class="o-top"><b>' + e(o.pelanggan) + '</b>' + badge(c.payStatus) + badge(o.status || 'Baru') + (M.unkCount(c.items) ? '<span class="badge amber">' + M.unkCount(c.items) + ' menyusul</span>' : '') + '</div>' +
       '<div class="o-sub">' + e(o.noNota) + ' · ' + U.fdate(o.tanggal) + ' · ' + e(o.produk || o.kategori) + ' · ' + c.qty + ' pcs' + (dlTxt ? ' · ' + dlTxt : '') + '</div></div>' +
       '<div class="o-amt"><b>' + U.rp(c.total) + '</b>' + (c.sisa > 0 ? '<small class="red-t">sisa ' + U.rp(c.sisa) + '</small>' : '<small class="green-t">lunas</small>') + '</div></a>';
   }
@@ -41,7 +41,7 @@
     ordP.forEach(o => {
       const c = M.calc(o);
       omzet += c.total; pcs += c.qty; modal += c.modal;
-      if (o.pakaiUkuran === 'Y') c.items.forEach(i => { const u = (i.ukuran || '-').toUpperCase(); sizes[u] = (sizes[u] || 0) + U.num(i.qty); });
+      if (o.pakaiUkuran === 'Y') c.items.filter(i => i.ukuran !== M.UNK).forEach(i => { const u = (i.ukuran || '-').toUpperCase(); sizes[u] = (sizes[u] || 0) + U.num(i.qty); });
     });
     const operasional = d.expenses.filter(x => !x.orderId && inP(x.tanggal)).reduce((s, x) => s + U.num(x.nominal), 0);
     const masuk = d.payments.filter(x => inP(x.tanggal)).reduce((s, x) => s + U.num(x.nominal), 0);

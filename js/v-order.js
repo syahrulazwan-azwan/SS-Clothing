@@ -19,6 +19,7 @@
     const metode = U.list(S.metodeBayar);
     const kPeng = U.list(S.kategoriPengeluaran);
     const SIZES = M.sizes();
+    const SZ = SIZES.concat(M.UNK);
     const isJersey = k => /jersey/i.test(k || '');
     const RX_MODAL = /^Modal (per pcs )?Rp ?([\d.]+)|^Modal \d+ pcs × Rp ?([\d.]+)/;
 
@@ -54,7 +55,7 @@
         g._zero = !hb;
         const named = gr.items.some(i => i.nama || i.nomor);
         const seen = {}; let dup = false, odd = false;
-        gr.items.forEach(i => { if (seen[i.ukuran]) dup = true; seen[i.ukuran] = 1; if (SIZES.indexOf(i.ukuran) < 0) odd = true; });
+        gr.items.forEach(i => { if (seen[i.ukuran]) dup = true; seen[i.ukuran] = 1; if (SZ.indexOf(i.ukuran) < 0) odd = true; });
         if (named || dup || odd) {
           g.mode = 'nama';
           g.rows = gr.items.map(i => ({ nama: i.nama, nomor: i.nomor, ukuran: i.ukuran, qty: U.num(i.qty), harga: U.num(i.harga), _manual: U.num(i.harga) !== hb + M.tambahUk(i.ukuran) }));
@@ -79,7 +80,7 @@
     const priceFor = (g, u) => g.sizeHarga[u] != null ? g.sizeHarga[u] : g.harga + M.tambahUk(u);
     function groupItems(g) {
       const ket = g.nama.trim();
-      if (g.mode === 'ukuran') return SIZES.filter(s => U.num(g.sizeQty[s]) > 0).map(s => ({ nama: '', nomor: '', ukuran: s, qty: U.num(g.sizeQty[s]), harga: priceFor(g, s), ket: ket }));
+      if (g.mode === 'ukuran') return SZ.filter(s => U.num(g.sizeQty[s]) > 0).map(s => ({ nama: '', nomor: '', ukuran: s, qty: U.num(g.sizeQty[s]), harga: priceFor(g, s), ket: ket }));
       return g.rows.filter(r => U.num(r.qty) > 0 && (r.nama || r.nomor || r.ukuran)).map(r => ({
         nama: (r.nama || '').trim(), nomor: (r.nomor || '').trim(), ukuran: (r.ukuran || '').trim(), qty: U.num(r.qty), ket: ket,
         harga: r._manual ? U.num(r.harga) : g.harga + M.tambahUk(r.ukuran)
@@ -155,15 +156,15 @@
         '<div class="nrow" data-r="' + i + '"><span class="ino">' + (i + 1) + '</span>' +
         '<input data-k="nama" placeholder="Nama' + (no ? ' punggung' : '') + '" value="' + e(r.nama) + '" enterkeyhint="next">' +
         (no ? '<input data-k="nomor" class="nomor" placeholder="No." inputmode="numeric" value="' + e(r.nomor) + '">' : '') +
-        '<select data-k="ukuran"><option value="">Ukuran</option>' + opt(r.ukuran && SIZES.indexOf(r.ukuran) < 0 ? SIZES.concat(r.ukuran) : SIZES, r.ukuran) + '</select>' +
+        '<select data-k="ukuran"' + (r.ukuran === M.UNK ? ' class="unk"' : '') + '><option value="">Ukuran</option>' + opt(r.ukuran && SZ.indexOf(r.ukuran) < 0 ? SZ.concat(r.ukuran) : SZ, r.ukuran) + '</select>' +
         '<input data-k="qty" class="qty" type="number" min="0" inputmode="numeric" value="' + e(r.qty) + '" aria-label="Jumlah">' +
         (F.showHarga ? '<input data-k="harga" class="money harga' + (r._manual ? ' manual' : '') + '" inputmode="numeric" value="' + (r._manual && !U.num(r.harga) ? '0' : U.moneyVal(r._manual ? r.harga : g.harga + M.tambahUk(r.ukuran))) + '" placeholder="0" aria-label="Harga">' : '') +
         '<button type="button" class="icon-btn del" data-act="del" aria-label="Hapus">✕</button></div>').join('') + '</div>' +
         '<button type="button" class="btn sm mt" data-act="add">+ Tambah orang</button>';
     }
     function sizesHtml(g) {
-      return '<div class="sizes">' + SIZES.map(s =>
-        '<div class="sz' + (U.num(g.sizeQty[s]) ? ' has' : '') + '" data-sz="' + e(s) + '"><div class="sz-h"><b>' + e(s) + '</b><small>' + U.fmt(priceFor(g, s)) + '</small></div>' +
+      return '<div class="sizes">' + SZ.map(s =>
+        '<div class="sz' + (U.num(g.sizeQty[s]) ? ' has' : '') + (s === M.UNK ? ' unk' : '') + '" data-sz="' + e(s) + '"><div class="sz-h"><b>' + e(s) + '</b><small>' + (s === M.UNK ? 'belum tahu' : U.fmt(priceFor(g, s))) + '</small></div>' +
         '<div class="stepper"><button type="button" data-step="-1" aria-label="Kurangi">−</button><input type="number" min="0" inputmode="numeric" value="' + (U.num(g.sizeQty[s]) || '') + '" placeholder="0" aria-label="Jumlah ' + e(s) + '"><button type="button" data-step="1" aria-label="Tambah">+</button></div></div>').join('') + '</div>';
     }
     function groupHtml(g, i) {
@@ -262,7 +263,7 @@
     /* ---------- Aksi kelompok ---------- */
     function toNama(g) {
       const rows = [];
-      SIZES.forEach(s => { for (let k = 0; k < U.num(g.sizeQty[s]); k++) rows.push({ nama: '', nomor: '', ukuran: s, qty: 1, harga: g.sizeHarga[s] || 0, _manual: g.sizeHarga[s] != null }); });
+      SZ.forEach(s => { for (let k = 0; k < U.num(g.sizeQty[s]); k++) rows.push({ nama: '', nomor: '', ukuran: s, qty: 1, harga: g.sizeHarga[s] || 0, _manual: g.sizeHarga[s] != null }); });
       g.rows = rows; g.mode = 'nama';
     }
     function setMode(i, m) {
@@ -301,7 +302,11 @@
     function parsePaste(txt) {
       const out = [];
       let cur = null, anyNo = false, title = '';
-      String(txt || '').split(/\r?\n/).forEach(raw => {
+      const clean = l => String(l || '').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim();
+      const LINES = String(txt || '').split(/\r?\n/);
+      const isListItem = l => /^\s*(\d+\s*[.)]|[-•])\s*/.test(clean(l).replace(/[*_~]/g, ''));
+      const nextNonEmpty = i => { for (let j = i + 1; j < LINES.length; j++) if (clean(LINES[j])) return LINES[j]; return ''; };
+      LINES.forEach((raw, idx) => {
         let line = raw.replace(/[​-‍⁠﻿]/g, '').trim();
         if (!line) return;
         const plain = line.replace(/[*_~]/g, '').trim();
@@ -311,18 +316,28 @@
           cur = { nama: name, rows: [] }; out.push(cur); return;
         }
         if (/^daftar\b/i.test(plain)) { title = plain; return; }
+        // Baris judul tanpa tanda ">" (cth. "Yang belum list") yang diikuti daftar bernomor/berstrip → kelompok baru
+        if (!isListItem(line) && !/[|,;\t]/.test(plain) && !M.normSize(plain) && isListItem(nextNonEmpty(idx)) &&
+          !/^(total|jumlah|masih ada|mohon|terima kasih|kalau|catatan|note)\b/i.test(plain)) {
+          cur = { nama: plain.replace(/:$/, '').trim(), rows: [] }; out.push(cur); return;
+        }
+        if (/^(total|jumlah|masih ada|mohon|terima kasih|kalau|catatan|note)\b/i.test(plain)) return;
+        if (!/[|,;\t]/.test(plain) && plain.split(/\s+/).length > 6) return;
         line = plain.replace(/^\s*(\d+\s*[.)]|[-•])\s*/, '');
         let tokens = line.split(/\t|;|,|\|/).map(s => s.trim()).filter(Boolean);
         if (tokens.length === 1) tokens = line.split(/\s+/);
-        let uk = '', nums = [], words = [];
+        let uk = '', nums = [], words = [], blank = false;
         tokens.forEach(tk => {
+          if (/^[._?\-]+$/.test(tk)) { blank = true; return; }
+          if (/^menyusul$/i.test(tk)) { uk = M.UNK; return; }
           const s = M.normSize(tk.replace(/^uk(uran)?\.?\s*/i, ''));
           if (!uk && s) uk = s;
           else if (/^\d+$/.test(tk)) nums.push(tk);
           else if (/^(x|pcs)$/i.test(tk)) { /* abaikan */ }
           else words.push(tk);
         });
-        if (!uk && !words.length && !nums.length) return;
+        if (!uk && !words.length && !nums.length && !blank) return;
+        if (!uk && (blank || words.length)) uk = M.UNK;
         const nama = words.join(' ');
         if (/^(nama|name|no|total)$/i.test(nama)) return;
         let nomor = '', qty = 1;
@@ -335,6 +350,7 @@
     }
     function applyPaste(res) {
       const isEmpty = g => !g.nama.trim() && !groupItems(g).length;
+      const replaced = new Set();
       let added = 0;
       res.groups.forEach(pg => {
         let g = null;
@@ -346,6 +362,7 @@
           else { g = newGroup(pg.nama, F.groups[F.groups.length - 1].harga); F.groups.push(g); }
         }
         if (g.mode === 'ukuran') toNama(g);
+        if (res.replace && !replaced.has(g)) { g.rows = []; replaced.add(g); }
         g.rows = g.rows.filter(r => r.nama || r.nomor || r.ukuran).concat(pg.rows);
         if (!g.rows.length) g.rows.push(blankRow());
         added += pg.rows.length;
@@ -393,6 +410,7 @@
           const r = g.rows[+row.dataset.r], k = t.dataset.k;
           r[k] = (k === 'qty' || k === 'harga') ? U.num(t.value) : t.value;
           if (k === 'harga') { r._manual = true; t.classList.add('manual'); }
+          if (k === 'ukuran') t.classList.toggle('unk', t.value === M.UNK);
           if (k === 'ukuran' && F.showHarga && !r._manual) { const h = row.querySelector('[data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + M.tambahUk(r.ukuran)); }
           recalc();
         }
@@ -491,10 +509,12 @@
         p.innerHTML = '<div class="panel"><b>Tempel daftar dari WhatsApp / Excel</b><p class="hint">Salin daftar dari grup WA lalu tempel di sini. Format per baris: <b>Nama | Ukuran | Nomor</b>. ' +
           'Baris berawalan <b>&gt;</b> (cth. <i>&gt; Lengan Panjang</i>) otomatis menjadi kelompok baru.</p>' +
           '<textarea id="pasteTxt" rows="8" placeholder="' + e('*DAFTAR NAMA KAOS PORSENI AL-HIKMA*\n\n> Lengan Pendek\n1. Fahry | L | 06\n2. Alby | XL | 02\n\n> Lengan Panjang\n1. Ainun | M | 07\n\n> Wali Kelas\n- XL') + '"></textarea>' +
+          (isNew ? '' : '<label class="inline small"><input type="checkbox" id="pasteReplace" checked> Ganti daftar lama dengan daftar baru (untuk daftar yang sudah dilengkapi pelanggan)</label>') +
           '<div class="row-btn"><button type="button" class="btn primary sm" data-act="pasteAdd">Masukkan</button><button type="button" class="btn ghost sm" data-act="closePanel">Tutup</button></div></div>';
         U.$('#pasteTxt', el).focus();
       } else if (act === 'pasteAdd') {
         const res = parsePaste(U.$('#pasteTxt', el).value);
+        const rp = U.$('#pasteReplace', el); res.replace = !!(rp && rp.checked);
         if (!res.groups.length) return U.toast('Tidak ada baris yang terbaca', 'err');
         const n = applyPaste(res);
         U.toast(n + ' baris dimasukkan' + (res.groups.length > 1 ? ' ke ' + res.groups.length + ' kelompok' : '') + '. Cek harga tiap kelompok ya.', 'ok');
@@ -513,8 +533,9 @@
     });
 
     /* ---------- Simpan ---------- */
-    form.addEventListener('submit', ev => {
-      ev.preventDefault();
+    form.addEventListener('submit', ev => { ev.preventDefault(); trySave(); });
+
+    function trySave() {
       const ord = Object.assign({}, F.order);
       if (!String(ord.pelanggan || '').trim()) {
         U.toast('Nama pesanan / pelanggan belum diisi', 'err');
@@ -523,7 +544,16 @@
       }
       const its = items();
       if (!its.length) { U.toast('Isi jumlah pesanan dulu (langkah 3)', 'err'); qtyArea.scrollIntoView({ block: 'center' }); return; }
-      if (!F.item && its.some(i => !i.ukuran)) { U.toast('Masih ada orang yang belum dipilih ukurannya', 'err'); return; }
+      const noSize = F.item ? [] : its.filter(i => !i.ukuran);
+      if (noSize.length) {
+        const nm = noSize.slice(0, 5).map(i => i.nama || ('No. ' + i.nomor)).join(', ') + (noSize.length > 5 ? ', …' : '');
+        U.confirm(noSize.length + ' orang belum dipilih ukurannya (' + nm + '). Tandai ukurannya "Menyusul" dan lengkapi nanti?', 'Ya, tandai Menyusul', () => {
+          F.groups.forEach(g => g.rows.forEach(r => { if ((r.nama || r.nomor) && !r.ukuran) r.ukuran = M.UNK; }));
+          drawQty();
+          setTimeout(trySave, 80);
+        });
+        return;
+      }
       const nol = its.filter(i => !i.harga);
       if (nol.length) {
         const ls = M.group(nol).map(g => (g.ket ? g.ket + ' – ' : '') + (g.ukuran !== '-' ? g.ukuran : 'item') + ' (' + g.qty + ' pcs)');
@@ -531,7 +561,7 @@
         return;
       }
       doSave(ord, its);
-    });
+    }
 
     function doSave(ord, its) {
       const rows = its.map((r, i) => Object.assign({ id: U.uid(), orderId: ord.id, urut: i + 1 }, r));
@@ -658,6 +688,7 @@
       V.badge(c.payStatus) +
       (o.deadline ? '<span class="muted">Target selesai ' + U.fdate(o.deadline) + (['Selesai', 'Diambil', 'Batal'].indexOf(o.status) < 0 && dl !== null ? ' (' + (dl < 0 ? '<span class="late">lewat ' + (-dl) + ' hari</span>' : dl === 0 ? '<span class="late">hari ini</span>' : dl + ' hari lagi') + ')' : '') + '</span>' : '') + '</div>' +
 
+      (M.unkCount(c.items) ? '<div class="warnbar">⚠ <b>' + M.unkCount(c.items) + ' pcs</b> ukurannya belum terdata (Menyusul). Kirim <b>Daftar nama</b> lewat WhatsApp ke pelanggan, lalu lengkapi lewat <a href="#/pesanan/' + e(o.id) + '/edit">Edit</a>.</div>' : '') +
       '<div class="stats six">' +
       stat('Total', U.rp(c.total), 'main') + stat('DP harus dibayar', U.rp(c.dpWajib)) + stat('Sudah dibayar', U.rp(c.paid)) +
       stat('Sisa', U.rp(Math.max(0, c.sisa)), c.sisa > 0 ? 'warn' : 'pos') + stat('Modal', U.rp(c.modal)) + stat('Laba', U.rp(c.laba), c.laba >= 0 ? 'pos' : 'neg') + '</div>' +
