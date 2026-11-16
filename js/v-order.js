@@ -36,8 +36,16 @@
       order: o, item: o.pakaiUkuran !== 'Y', groups: [], rows: [],
       expenses: [], modalPcs: 0, modalPcsId: U.uid(),
       pay: 'none', payLain: 0, payMetode: metode[0] || '',
-      dpEdited: false, showHarga: false
+      dpEdited: false, showHarga: false,
+      tamb: Object.assign({}, M.tambahan())   // tambahan harga ukuran besar, khusus pesanan ini
     };
+    const tKey = u => {
+      const k = String(u || '').toUpperCase();
+      if (F.tamb[k] != null) return k;
+      const n = M.xCount(k); if (n < 2) return null;
+      return Object.keys(F.tamb).find(x => M.xCount(x) === n) || null;
+    };
+    const tambUk = u => { const k = tKey(u); return k ? (F.tamb[k] || 0) : 0; };
     const newGroup = (nama, harga) => ({ nama: nama || '', harga: Number(harga) || 0, mode: 'ukuran', sizeQty: {}, sizeHarga: {}, rows: [] });
     const blankRow = () => ({ nama: '', nomor: '', ukuran: '', qty: 1, harga: 0, _manual: false });
     const blankItem = () => ({ ukuran: '', qty: 1, harga: 0 });
@@ -47,9 +55,22 @@
       F.rows = oldItems.map(i => ({ ukuran: i.ukuran, qty: U.num(i.qty), harga: U.num(i.harga) }));
       if (!F.rows.length) F.rows.push(blankItem());
     } else {
+      // Baca ulang tambahan ukuran yang dipakai pesanan ini (bisa beda dari Pengaturan)
+      const diffs = {};
+      M.byGroup(oldItems).forEach(gr => {
+        const c0 = {};
+        gr.items.filter(i => !tKey(i.ukuran)).forEach(i => { c0[U.num(i.harga)] = (c0[U.num(i.harga)] || 0) + U.num(i.qty); });
+        const bs = Object.keys(c0).sort((a, b) => c0[b] - c0[a])[0];
+        if (bs == null) return;
+        gr.items.filter(i => tKey(i.ukuran)).forEach(i => {
+          const k = tKey(i.ukuran), d = U.num(i.harga) - Number(bs);
+          diffs[k] = diffs[k] || {}; diffs[k][d] = (diffs[k][d] || 0) + U.num(i.qty);
+        });
+      });
+      Object.keys(diffs).forEach(k => { F.tamb[k] = Number(Object.keys(diffs[k]).sort((a, b) => diffs[k][b] - diffs[k][a])[0]); });
       M.byGroup(oldItems).forEach(gr => {
         const cnt = {};
-        gr.items.forEach(i => { const b = U.num(i.harga) - M.tambahUk(i.ukuran); cnt[b] = (cnt[b] || 0) + U.num(i.qty); });
+        gr.items.forEach(i => { const b = U.num(i.harga) - tambUk(i.ukuran); cnt[b] = (cnt[b] || 0) + U.num(i.qty); });
         const hb = Number(Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0] || o.hargaDasar || 0);
         const g = newGroup(gr.nama, hb);
         g._zero = !hb;
@@ -58,10 +79,10 @@
         gr.items.forEach(i => { if (seen[i.ukuran]) dup = true; seen[i.ukuran] = 1; if (SZ.indexOf(i.ukuran) < 0) odd = true; });
         if (named || dup || odd) {
           g.mode = 'nama';
-          g.rows = gr.items.map(i => ({ nama: i.nama, nomor: i.nomor, ukuran: i.ukuran, qty: U.num(i.qty), harga: U.num(i.harga), _manual: U.num(i.harga) !== hb + M.tambahUk(i.ukuran) }));
+          g.rows = gr.items.map(i => ({ nama: i.nama, nomor: i.nomor, ukuran: i.ukuran, qty: U.num(i.qty), harga: U.num(i.harga), _manual: U.num(i.harga) !== hb + tambUk(i.ukuran) }));
           if (g.rows.some(r => r._manual)) F.showHarga = true;
         } else {
-          gr.items.forEach(i => { g.sizeQty[i.ukuran] = U.num(i.qty); if (U.num(i.harga) !== hb + M.tambahUk(i.ukuran)) g.sizeHarga[i.ukuran] = U.num(i.harga); });
+          gr.items.forEach(i => { g.sizeQty[i.ukuran] = U.num(i.qty); if (U.num(i.harga) !== hb + tambUk(i.ukuran)) g.sizeHarga[i.ukuran] = U.num(i.harga); });
         }
         F.groups.push(g);
       });
@@ -77,13 +98,13 @@
       F.dpEdited = U.num(src.dpNominal) > 0 && U.num(src.dpNominal) !== auto;
     }
 
-    const priceFor = (g, u) => g.sizeHarga[u] != null ? g.sizeHarga[u] : g.harga + M.tambahUk(u);
+    const priceFor = (g, u) => g.sizeHarga[u] != null ? g.sizeHarga[u] : g.harga + tambUk(u);
     function groupItems(g) {
       const ket = g.nama.trim();
       if (g.mode === 'ukuran') return SZ.filter(s => U.num(g.sizeQty[s]) > 0).map(s => ({ nama: '', nomor: '', ukuran: s, qty: U.num(g.sizeQty[s]), harga: priceFor(g, s), ket: ket }));
       return g.rows.filter(r => U.num(r.qty) > 0 && (r.nama || r.nomor || r.ukuran)).map(r => ({
         nama: (r.nama || '').trim(), nomor: (r.nomor || '').trim(), ukuran: (r.ukuran || '').trim(), qty: U.num(r.qty), ket: ket,
-        harga: r._manual ? U.num(r.harga) : g.harga + M.tambahUk(r.ukuran)
+        harga: r._manual ? U.num(r.harga) : g.harga + tambUk(r.ukuran)
       }));
     }
     function items() {
@@ -158,7 +179,7 @@
         (no ? '<input data-k="nomor" class="nomor" placeholder="No." inputmode="numeric" value="' + e(r.nomor) + '">' : '') +
         '<select data-k="ukuran"' + (r.ukuran === M.UNK ? ' class="unk"' : '') + '><option value="">Ukuran</option>' + opt(r.ukuran && SZ.indexOf(r.ukuran) < 0 ? SZ.concat(r.ukuran) : SZ, r.ukuran) + '</select>' +
         '<input data-k="qty" class="qty" type="number" min="0" inputmode="numeric" value="' + e(r.qty) + '" aria-label="Jumlah">' +
-        (F.showHarga ? '<input data-k="harga" class="money harga' + (r._manual ? ' manual' : '') + '" inputmode="numeric" value="' + (r._manual && !U.num(r.harga) ? '0' : U.moneyVal(r._manual ? r.harga : g.harga + M.tambahUk(r.ukuran))) + '" placeholder="0" aria-label="Harga">' : '') +
+        (F.showHarga ? '<input data-k="harga" class="money harga' + (r._manual ? ' manual' : '') + '" inputmode="numeric" value="' + (r._manual && !U.num(r.harga) ? '0' : U.moneyVal(r._manual ? r.harga : g.harga + tambUk(r.ukuran))) + '" placeholder="0" aria-label="Harga">' : '') +
         '<button type="button" class="icon-btn del" data-act="del" aria-label="Hapus">✕</button></div>').join('') + '</div>' +
         '<button type="button" class="btn sm mt" data-act="add">+ Tambah orang</button>';
     }
@@ -193,8 +214,11 @@
         recalc();
         return;
       }
-      const t = M.tambahan(), keys = Object.keys(t).filter(k => t[k]);
+      const tk = Object.keys(F.tamb);
       qtyArea.innerHTML =
+        (tk.length ? '<div class="tamb"><span class="tl">Tambahan harga ukuran besar <small class="muted">(khusus pesanan ini)</small></span>' +
+          tk.map(k => '<label>' + e(k) + ' <span class="rp"><span>+</span><input class="money" inputmode="numeric" data-tb="' + e(k) + '" value="' + (F.tamb[k] ? U.moneyVal(F.tamb[k]) : '0') + '"></span></label>').join('') +
+          '<button type="button" class="btn sm ghost" data-act="noTamb">Tanpa tambahan</button></div>' : '') +
         '<div class="opts"><label class="inline"><input type="checkbox" id="pakaiNomor"' + (F.order.pakaiNomor === 'Y' ? ' checked' : '') + '> Pakai nomor punggung</label>' +
         '<label class="inline"><input type="checkbox" id="showHarga"' + (F.showHarga ? ' checked' : '') + '> Harga khusus per orang</label></div>' +
         '<div id="groups">' + F.groups.map(groupHtml).join('') + '</div>' +
@@ -202,8 +226,13 @@
         '<button type="button" class="btn sm" data-act="paste">📋 Tempel daftar dari WhatsApp</button></div>' +
         '<div id="panel"></div>' +
         '<p class="hint">Kelompok dipakai kalau harganya beda, misalnya <i>Lengan Pendek</i> &amp; <i>Lengan Panjang</i>, atau <i>1 Set</i> &amp; <i>Atasan Saja</i>. ' +
-        'Pilih <b>Daftar nama</b> untuk mengisi nama' + ' / nomor punggung — jumlah per ukuran otomatis jadi baris yang tinggal diisi.' +
-        (keys.length ? ' Ukuran besar otomatis lebih mahal: ' + keys.map(k => e(k) + ' +' + U.fmt(t[k])).join(', ') + ' (<a href="#/pengaturan">ubah</a>).' : '') + '</p>';
+        'Pilih <b>Daftar nama</b> untuk mengisi nama' + ' / nomor punggung — jumlah per ukuran otomatis jadi baris yang tinggal diisi. ' +
+        'Nilai bawaan tambahan ukuran besar diatur di <a href="#/pengaturan">Pengaturan</a>.</p>';
+      recalc();
+    }
+    function refreshGroups() {
+      const box = U.$('#groups', el);
+      if (box) box.innerHTML = F.groups.map(groupHtml).join('');
       recalc();
     }
     function redrawGroup(i) {
@@ -388,6 +417,7 @@
         if (f === 'dpPersen') F.dpEdited = false;
         recalc(); return;
       }
+      if (t.dataset.tb) { F.tamb[t.dataset.tb] = U.num(t.value); refreshGroups(); return; }
       if (t.id === 'dpNom') { F.dpEdited = U.num(t.value) > 0; F.order.dpNominal = U.num(t.value); recalc(); return; }
       if (t.id === 'modalPcs') { F.modalPcs = U.num(t.value); recalc(); return; }
       if (t.id === 'payLain') { F.payLain = U.num(t.value); recalc(); return; }
@@ -400,7 +430,7 @@
         if (t.dataset.gk === 'harga') {
           g.harga = U.num(t.value); g.sizeHarga = {}; g._zero = t.value.trim() !== '' && !g.harga;
           U.$$('.sz', gEl).forEach(d => { d.querySelector('small').textContent = U.fmt(priceFor(g, d.dataset.sz)); });
-          if (F.showHarga) g.rows.forEach((r, i) => { if (!r._manual) { const h = gEl.querySelector('.nrow[data-r="' + i + '"] [data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + M.tambahUk(r.ukuran)); } });
+          if (F.showHarga) g.rows.forEach((r, i) => { if (!r._manual) { const h = gEl.querySelector('.nrow[data-r="' + i + '"] [data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + tambUk(r.ukuran)); } });
           recalc(); return;
         }
         const sz = t.closest('.sz');
@@ -411,7 +441,7 @@
           r[k] = (k === 'qty' || k === 'harga') ? U.num(t.value) : t.value;
           if (k === 'harga') { r._manual = true; t.classList.add('manual'); }
           if (k === 'ukuran') t.classList.toggle('unk', t.value === M.UNK);
-          if (k === 'ukuran' && F.showHarga && !r._manual) { const h = row.querySelector('[data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + M.tambahUk(r.ukuran)); }
+          if (k === 'ukuran' && F.showHarga && !r._manual) { const h = row.querySelector('[data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + tambUk(r.ukuran)); }
           recalc();
         }
         return;
@@ -494,6 +524,11 @@
         const r = +b.closest('.nrow').dataset.r;
         if (gEl) { const g = F.groups[gi]; g.rows.splice(r, 1); if (!g.rows.length) g.rows.push(blankRow()); redrawGroup(gi); }
         else { F.rows.splice(r, 1); if (!F.rows.length) F.rows.push(blankItem()); drawQty(); }
+      } else if (act === 'noTamb') {
+        Object.keys(F.tamb).forEach(k => { F.tamb[k] = 0; });
+        U.$$('[data-tb]', el).forEach(i => { i.value = '0'; });
+        refreshGroups();
+        U.toast('Semua ukuran memakai harga yang sama', 'ok');
       } else if (act === 'addGroup') {
         const last = F.groups[F.groups.length - 1];
         F.groups.push(newGroup('', last ? last.harga : 0));

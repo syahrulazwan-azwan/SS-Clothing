@@ -129,7 +129,7 @@
       f('dpPersen', 'DP default (%)', 'type="number" min="0" max="100"') +
       '<label class="f">Pembulatan DP<select data-s="bulatDp">' + [['0', 'Tidak dibulatkan'], ['1000', 'Ke ribuan'], ['10000', 'Ke 10 ribu'], ['50000', 'Ke 50 ribu'], ['100000', 'Ke 100 ribu']].map(x => '<option value="' + x[0] + '"' + (String(S.bulatDp) === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select></label>' +
       f('ukuran', 'Daftar ukuran (urut)', 'placeholder="S,M,L,XL"', 'span2') +
-      ta('tambahanUkuran', 'Tambahan harga per ukuran', 4, '', 'Format: UKURAN=nominal, satu per baris. cth. XXL=10000') +
+      ta('tambahanUkuran', 'Tambahan harga ukuran besar (bawaan)', 4, '', 'Format: UKURAN=nominal, satu per baris. cth. XXL=5000. Isi 0 jika tidak ada tambahan. Bisa diubah lagi di setiap pesanan.') +
       ta('kategoriProduk', 'Kategori produk', 2, '', 'Pisahkan dengan koma.') +
       ta('kategoriBerukuran', 'Kategori yang memakai ukuran', 2, '', 'Otomatis mencentang "Pakai ukuran".') +
       ta('kategoriPengeluaran', 'Kategori pengeluaran / modal', 3, 'span2') +
