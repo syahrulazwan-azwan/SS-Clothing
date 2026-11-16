@@ -1,6 +1,6 @@
 /* Service worker: simpan tampilan aplikasi di perangkat agar terbuka instan & bisa offline.
    Naikkan VERSION setiap kali Anda mengubah file aplikasi. */
-const VERSION = 'cp-v1.2.0';
+const VERSION = 'cp-v1.2.1';
 const FILES = ['./', 'index.html', 'css/style.css', 'js/util.js', 'js/store.js', 'js/model.js', 'js/print.js',
   'js/v-home.js', 'js/v-order.js', 'js/v-other.js', 'js/app.js', 'manifest.webmanifest', 'icons/favicon.png', 'icons/logo-200.png', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 

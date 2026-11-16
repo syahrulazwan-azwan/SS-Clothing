@@ -195,7 +195,7 @@
       groups.forEach(g => {
         L.push('');
         if (g.nama) L.push('> *' + g.nama + '*');
-        rows.filter(r => r.ket === g.nama).forEach(r => L.push('- ' + r.ukuran + ' : ' + r.qty + ' x ' + n(r.harga) + ' = ' + n(r.jumlah)));
+        rows.filter(r => r.ket === g.nama).forEach(r => L.push('- ' + r.ukuran + ' : ' + r.qty + ' x ' + n(r.harga) + ' = ' + n(r.jumlah) + (r.harga ? '' : ' (gratis)')));
       });
       if (c.diskon || c.ongkir) {
         L.push('');

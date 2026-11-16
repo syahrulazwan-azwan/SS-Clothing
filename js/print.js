@@ -39,7 +39,7 @@
     return '<table class="p-table"><thead><tr><th class="c">No</th><th>Deskripsi</th><th class="c">Qty</th><th class="r">Harga Satuan</th><th class="r">Jumlah</th></tr></thead><tbody>' +
       rows.map((g, i) => '<tr><td class="c">' + (i + 1) + '</td><td>' + e(g.ket || (pakaiUk ? (o.kategori || 'Item') : '')) +
         (g.ukuran !== '-' ? (g.ket || pakaiUk ? ' — ' : '') + '<b>' + (pakaiUk ? 'Ukuran ' : '') + e(g.ukuran) + '</b>' : '') + '</td>' +
-        '<td class="c">' + g.qty + '</td><td class="r">' + U.rp(g.harga) + '</td><td class="r">' + U.rp(g.jumlah) + '</td></tr>').join('') +
+        '<td class="c">' + g.qty + '</td><td class="r">' + (g.harga ? U.rp(g.harga) : 'Rp 0 <small>(gratis)</small>') + '</td><td class="r">' + U.rp(g.jumlah) + '</td></tr>').join('') +
       '</tbody><tfoot><tr><td></td><td><b>Jumlah</b></td><td class="c"><b>' + c.qty + '</b></td><td></td><td class="r"><b>' + U.rp(c.subtotal) + '</b></td></tr></tfoot></table>';
   }
 
