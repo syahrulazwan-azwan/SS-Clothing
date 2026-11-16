@@ -398,3 +398,9 @@ select.unk { color: #b45309; font-weight: 600; background: #fff7ed; }
 .gratis { font-size: 11px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 6px; padding: 3px 6px; text-align: center; visibility: hidden; }
 .gratis.on { visibility: visible; }
 @media (max-width: 640px) { .nlist.item .nrow.xrow { grid-template-columns: 20px minmax(0, 1fr) 54px 28px; } .xrow .gratis { grid-column: 2 / 4; justify-self: start; } }
+.munits { display: flex; flex-direction: column; gap: 6px; }
+.mu { display: grid; grid-template-columns: minmax(0, 1fr) 160px 170px; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--bd); border-radius: 10px; background: #fcfcfd; }
+.mu-l { min-width: 0; } .mu-l b { word-break: break-word; }
+.mu-r { display: flex; flex-direction: column; text-align: right; line-height: 1.25; }
+.mu-r small { font-size: 12px; }
+@media (max-width: 640px) { .mu { grid-template-columns: 1fr 1fr; } .mu-l { grid-column: 1 / -1; } }

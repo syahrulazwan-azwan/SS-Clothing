@@ -21,7 +21,8 @@
     const SIZES = M.sizes();
     const SZ = SIZES.concat(M.UNK);
     const isJersey = k => /jersey/i.test(k || '');
-    const RX_MODAL = /^Modal (per pcs )?Rp ?([\d.]+)|^Modal \d+ pcs × Rp ?([\d.]+)/;
+    const RX_MODAL = /^Modal (per pcs )?Rp ?([\d.]+)|^Modal \d+ pcs × Rp ?([\d.]+)/;   // format lama (satu modal untuk semua)
+    const RX_MU = /^Modal (.+?): \d+ pcs × Rp ?([\d.]+)$/;                                // modal per kelompok / item
 
     /* ---------- Data ---------- */
     const o = base ? Object.assign({}, base) : {
@@ -34,7 +35,7 @@
     }
     const F = {
       order: o, item: o.pakaiUkuran !== 'Y', groups: [], rows: [],
-      expenses: [], modalPcs: 0, modalPcsId: U.uid(),
+      expenses: [], modalLoad: [],
       pay: 'none', payLain: 0, payMetode: metode[0] || '',
       dpEdited: false, showHarga: false,
       tamb: Object.assign({}, M.tambahan()),  // tambahan harga ukuran besar, khusus pesanan ini
@@ -93,8 +94,10 @@
     }
     if (src) {
       M.calc(src).exps.forEach(x => {
-        const m = String(x.keterangan || '').match(RX_MODAL);
-        if (m && !F.modalPcs && x.kategori === (kPeng[0] || 'Produksi')) { F.modalPcs = U.num(m[2] || m[3]); F.modalPcsId = x.id; }
+        const ket = String(x.keterangan || '');
+        const mu = ket.match(RX_MU), m = !mu && ket.match(RX_MODAL);
+        if (mu) F.modalLoad.push({ label: mu[1], per: U.num(mu[2]) });
+        else if (m) F.modalLoad.push({ label: '*', per: U.num(m[2] || m[3]) });
         else F.expenses.push(Object.assign({}, x));
       });
       const auto = M.totals(Object.assign({}, src, { dpNominal: 0 }), oldItems).dpWajib;
@@ -163,11 +166,11 @@
           '<p class="paynote" id="payNote"></p></div>'
           : '<p class="hint">Pembayaran DP / pelunasan dicatat di halaman detail pesanan (tombol <b>+ DP</b> / <b>+ Pelunasan</b>).</p>')) +
 
-      step(5, 'Modal <small class="muted">(boleh kosong)</small>', '<div class="fgrid">' +
-        '<label class="f">Modal per pcs' + money('id="modalPcs"', F.modalPcs) + '</label>' +
-        '<div class="f"><span>Total modal</span><div class="readout" id="tModal"></div></div>' +
-        '<div class="f"><span>Perkiraan laba</span><div class="readout" id="tLaba"></div></div></div>' +
+      step(5, 'Modal <small class="muted">(boleh kosong)</small>', '<p class="hint top">Isi modal per pcs untuk tiap kelompok — misalnya 1 Set dan Atasan Saja, atau Lengan Panjang dan Lengan Pendek, modalnya bisa berbeda.</p>' +
+        '<div id="modalUnits" class="munits"></div>' +
         '<div id="modalRows" class="mrows"></div>' +
+        '<div class="fgrid mt"><div class="f"><span>Total modal</span><div class="readout" id="tModal"></div></div>' +
+        '<div class="f"><span>Perkiraan laba</span><div class="readout" id="tLaba"></div></div></div>' +
         '<button type="button" class="btn sm ghost" data-act="addModal">+ Biaya lain (ongkir vendor, bordir, dll.)</button>') +
 
       '<details class="card more"' + (o.diskon || o.ongkir || o.catatan || o.alamat || (o.status && o.status !== 'Baru') ? ' open' : '') + '><summary>Opsi lainnya <small class="muted">— tanggal, status, diskon, ongkir, DP %, catatan</small></summary><div class="fgrid">' +
@@ -260,6 +263,47 @@
       old.outerHTML = groupHtml(F.groups[i], i);
       recalc();
     }
+    /* ---------- Modal per kelompok / per barang ---------- */
+    function units() {
+      const sum = list => ({ qty: list.reduce((a, x) => a + x.qty, 0), rev: list.reduce((a, x) => a + x.qty * x.harga, 0) });
+      if (F.item) return F.rows.filter(r => String(r.ukuran || '').trim()).map(r => Object.assign({ ref: r, label: String(r.ukuran).trim() }, sum([{ qty: U.num(r.qty), harga: U.num(r.harga) }])));
+      const gs = F.groups.map((g, i) => Object.assign({ ref: g, label: g.nama.trim() || (F.groups.length > 1 ? 'Kelompok ' + (i + 1) : 'Semua') }, sum(groupItems(g))));
+      const xs = F.extras.filter(x => String(x.nama || '').trim()).map(x => Object.assign({ ref: x, label: String(x.nama).trim(), extra: true }, sum([{ qty: U.num(x.qty), harga: U.num(x.harga) }])));
+      return gs.concat(xs);
+    }
+    let muSig = null;
+    function drawUnits(force) {
+      const us = units(), box = U.$('#modalUnits', el);
+      const sig = us.map(u => u.label + (u.extra ? '+' : '')).join('|');
+      if (force || sig !== muSig || !box.children.length) {
+        if (!force && box.contains(document.activeElement) && sig === muSig) return;
+        muSig = sig;
+        box.innerHTML = us.length ? us.map((u, i) =>
+          '<div class="mu" data-mu="' + i + '"><div class="mu-l"><b>' + e(u.label) + '</b>' + (u.extra ? ' <small class="muted">(item tambahan)</small>' : '') + '<small class="mu-q muted"></small></div>' +
+          '<div class="rp"><span>Rp</span><input class="money" inputmode="numeric" data-mu-in="' + i + '" value="' + U.moneyVal(u.ref.modal) + '" placeholder="modal/pcs"></div>' +
+          '<div class="mu-r"><b class="mu-t"></b><small class="mu-lb"></small></div></div>').join('')
+          : '<p class="muted small">Isi jumlah pesanan dulu.</p>';
+      }
+      us.forEach((u, i) => {
+        const row = box.querySelector('.mu[data-mu="' + i + '"]'); if (!row) return;
+        const per = U.num(u.ref.modal), tot = per * u.qty;
+        row.querySelector('.mu-q').textContent = ' · ' + u.qty + ' pcs';
+        row.querySelector('.mu-t').textContent = per ? U.rp(tot) : '–';
+        const lb = row.querySelector('.mu-lb');
+        lb.textContent = !per ? '' : u.rev ? 'laba ' + U.rp(u.rev - tot) : 'gratis — biaya ditanggung';
+        lb.className = 'mu-lb ' + (!u.rev ? 'muted' : u.rev - tot >= 0 ? 'green-t' : 'red-t');
+      });
+    }
+    function applyModalLoad() {
+      const us = units();
+      F.modalLoad.forEach(ml => {
+        if (ml.label === '*') { us.filter(u => !u.extra && !u.ref.modal).forEach(u => { u.ref.modal = ml.per; }); return; }
+        const u = us.find(x => x.label === ml.label && !x.ref.modal) || us.find(x => x.label.toLowerCase() === ml.label.toLowerCase());
+        if (u) u.ref.modal = ml.per;
+        else F.expenses.push({ id: U.uid(), tanggal: F.order.tanggal, kategori: kPeng[0] || 'Produksi', keterangan: 'Modal ' + ml.label, nominal: 0 });
+      });
+    }
+
     function drawModal() {
       U.$('#modalRows', el).innerHTML = F.expenses.map((x, i) =>
         '<div class="mrow" data-m="' + i + '"><select data-k="kategori">' + opt(kPeng.indexOf(x.kategori) < 0 && x.kategori ? kPeng.concat(x.kategori) : kPeng, x.kategori) + '</select>' +
@@ -286,7 +330,8 @@
         if (d && document.activeElement !== d) d.value = U.moneyVal(T.dpWajib);
       }
       U.$('#dpPct', el).textContent = F.dpEdited ? '(diubah manual)' : T.dpPersen ? '(' + T.dpPersen + '%)' : '';
-      const modal = F.modalPcs * T.qty + F.expenses.reduce((s, x) => s + U.num(x.nominal), 0);
+      drawUnits();
+      const modal = units().reduce((a, u) => a + U.num(u.ref.modal) * u.qty, 0) + F.expenses.reduce((s, x) => s + U.num(x.nominal), 0);
       U.$('#sumQty', el).textContent = T.qty + ' pcs';
       U.$('#tTotal', el).textContent = U.rp(T.total);
       U.$('#barTotal', el).textContent = U.rp(T.total) + ' · ' + T.qty + ' pcs';
@@ -444,7 +489,7 @@
       }
       if (t.dataset.tb) { F.tamb[t.dataset.tb] = U.num(t.value); refreshGroups(); return; }
       if (t.id === 'dpNom') { F.dpEdited = U.num(t.value) > 0; F.order.dpNominal = U.num(t.value); recalc(); return; }
-      if (t.id === 'modalPcs') { F.modalPcs = U.num(t.value); recalc(); return; }
+      if (t.dataset.muIn != null) { const u = units()[+t.dataset.muIn]; if (u) u.ref.modal = U.num(t.value); recalc(); return; }
       if (t.id === 'payLain') { F.payLain = U.num(t.value); recalc(); return; }
       const mrow = t.closest('.mrow');
       if (mrow && t.dataset.k) { const x = F.expenses[+mrow.dataset.m]; x[t.dataset.k] = t.dataset.k === 'nominal' ? U.num(t.value) : t.value; recalc(); return; }
@@ -635,7 +680,10 @@
       const expenses = F.expenses.filter(x => U.num(x.nominal) !== 0).map(x => ({
         id: x.id || U.uid(), tanggal: x.tanggal || ord.tanggal, orderId: ord.id, kategori: x.kategori || '', keterangan: x.keterangan || '', nominal: U.num(x.nominal), dibuat: x.dibuat || U.nowIso()
       }));
-      if (F.modalPcs > 0) expenses.unshift({ id: F.modalPcsId, tanggal: ord.tanggal || U.today(), orderId: ord.id, kategori: kPeng[0] || 'Produksi', keterangan: 'Modal per pcs Rp ' + U.fmt(F.modalPcs) + ' × ' + qty + ' pcs', nominal: F.modalPcs * qty, dibuat: U.nowIso() });
+      units().filter(u => U.num(u.ref.modal) > 0 && u.qty > 0).reverse().forEach(u => {
+        expenses.unshift({ id: U.uid(), tanggal: ord.tanggal || U.today(), orderId: ord.id, kategori: kPeng[0] || 'Produksi', keterangan: 'Modal ' + u.label + ': ' + u.qty + ' pcs × Rp ' + U.fmt(u.ref.modal), nominal: U.num(u.ref.modal) * u.qty, dibuat: U.nowIso() });
+      });
+      void qty;
       ord.pelanggan = ord.pelanggan.trim();
       ord.hargaDasar = F.item ? U.num((F.rows[0] || {}).harga) : U.num(F.groups[0].harga);
       ord.diskon = U.num(ord.diskon); ord.ongkir = U.num(ord.ongkir);
@@ -653,6 +701,7 @@
       App.go('#/pesanan/' + ord.id);
     }
 
+    applyModalLoad();
     drawQty();
     drawModal();
     if (isNew && !copyFrom) setTimeout(() => form.querySelector('[data-f="pelanggan"]').focus(), 30);
