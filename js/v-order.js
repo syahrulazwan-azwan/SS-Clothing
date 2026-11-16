@@ -37,7 +37,8 @@
       expenses: [], modalPcs: 0, modalPcsId: U.uid(),
       pay: 'none', payLain: 0, payMetode: metode[0] || '',
       dpEdited: false, showHarga: false,
-      tamb: Object.assign({}, M.tambahan())   // tambahan harga ukuran besar, khusus pesanan ini
+      tamb: Object.assign({}, M.tambahan()),  // tambahan harga ukuran besar, khusus pesanan ini
+      extras: []                              // item tambahan: spanduk, bendera, dll.
     };
     const tKey = u => {
       const k = String(u || '').toUpperCase();
@@ -50,11 +51,13 @@
     const blankRow = () => ({ nama: '', nomor: '', ukuran: '', qty: 1, harga: 0, _manual: false });
     const blankItem = () => ({ ukuran: '', qty: 1, harga: 0 });
 
-    const oldItems = base ? M.calc(base).items : [];
+    let oldItems = base ? M.calc(base).items : [];
     if (F.item) {
       F.rows = oldItems.map(i => ({ ukuran: i.ukuran, qty: U.num(i.qty), harga: U.num(i.harga) }));
       if (!F.rows.length) F.rows.push(blankItem());
     } else {
+      F.extras = oldItems.filter(M.isExtra).map(i => ({ nama: i.ukuran, qty: U.num(i.qty), harga: U.num(i.harga) }));
+      oldItems = oldItems.filter(i => !M.isExtra(i));
       // Baca ulang tambahan ukuran yang dipakai pesanan ini (bisa beda dari Pengaturan)
       const diffs = {};
       M.byGroup(oldItems).forEach(gr => {
@@ -98,19 +101,34 @@
       F.dpEdited = U.num(src.dpNominal) > 0 && U.num(src.dpNominal) !== auto;
     }
 
-    const priceFor = (g, u) => g.sizeHarga[u] != null ? g.sizeHarga[u] : g.harga + tambUk(u);
+    const gPrice = (g, u) => g.harga ? g.harga + tambUk(u) : 0;   // kelompok gratis tetap 0 di semua ukuran
+    const priceFor = (g, u) => g.sizeHarga[u] != null ? g.sizeHarga[u] : gPrice(g, u);
     function groupItems(g) {
       const ket = g.nama.trim();
       if (g.mode === 'ukuran') return SZ.filter(s => U.num(g.sizeQty[s]) > 0).map(s => ({ nama: '', nomor: '', ukuran: s, qty: U.num(g.sizeQty[s]), harga: priceFor(g, s), ket: ket }));
       return g.rows.filter(r => U.num(r.qty) > 0 && (r.nama || r.nomor || r.ukuran)).map(r => ({
         nama: (r.nama || '').trim(), nomor: (r.nomor || '').trim(), ukuran: (r.ukuran || '').trim(), qty: U.num(r.qty), ket: ket,
-        harga: r._manual ? U.num(r.harga) : g.harga + tambUk(r.ukuran)
+        harga: r._manual ? U.num(r.harga) : gPrice(g, r.ukuran)
       }));
     }
     function items() {
       if (F.item) return F.rows.filter(r => U.num(r.qty) > 0 && String(r.ukuran || '').trim()).map(r => ({ nama: '', nomor: '', ukuran: (r.ukuran || '').trim(), qty: U.num(r.qty), harga: U.num(r.harga), ket: '' }));
-      return F.groups.reduce((a, g) => a.concat(groupItems(g)), []);
+      return F.groups.reduce((a, g) => a.concat(groupItems(g)), []).concat(
+        F.extras.filter(x => String(x.nama || '').trim() && U.num(x.qty) > 0).map(x => ({ nama: '', nomor: '', ukuran: String(x.nama).trim(), qty: U.num(x.qty), harga: U.num(x.harga), ket: M.EXTRA })));
     }
+    function extrasHtml() {
+      return '<div class="extras"><div class="ex-h"><b>Item tambahan</b> <small class="muted">(opsional — spanduk, bendera, dll. Harga 0 = gratis)</small></div>' +
+        (F.extras.length ? '<div class="nlist item">' + F.extras.map((x, i) =>
+          '<div class="nrow xrow" data-x="' + i + '"><span class="ino">+</span>' +
+          '<input data-xk="nama" placeholder="Nama barang (cth. Spanduk)" value="' + e(x.nama) + '">' +
+          '<input data-xk="qty" class="qty" type="number" min="0" inputmode="numeric" value="' + e(x.qty) + '" aria-label="Jumlah">' +
+          '<div class="rp"><span>Rp</span><input data-xk="harga" class="money" inputmode="numeric" value="' + (U.num(x.harga) ? U.moneyVal(x.harga) : '0') + '" aria-label="Harga"></div>' +
+          '<button type="button" class="icon-btn del" data-act="delExtra" aria-label="Hapus">✕</button>' +
+          '<span class="gratis' + (U.num(x.harga) ? '' : ' on') + '">GRATIS</span></div>').join('') + '</div>' : '') +
+        '<div class="row-btn wrap"><button type="button" class="btn sm" data-act="addExtra" data-nm="Spanduk">+ Spanduk gratis</button>' +
+        '<button type="button" class="btn sm ghost" data-act="addExtra" data-nm="">+ Item lain</button></div></div>';
+    }
+    function drawExtras() { const b = U.$('#extras', el); if (b) b.innerHTML = extrasHtml(); recalc(); }
 
     /* ---------- Kerangka ---------- */
     const step = (n, title, body, extra) => '<section class="card step"><div class="card-head"><h2><span class="num">' + n + '</span>' + title + '</h2>' + (extra || '') + '</div>' + body + '</section>';
@@ -179,7 +197,7 @@
         (no ? '<input data-k="nomor" class="nomor" placeholder="No." inputmode="numeric" value="' + e(r.nomor) + '">' : '') +
         '<select data-k="ukuran"' + (r.ukuran === M.UNK ? ' class="unk"' : '') + '><option value="">Ukuran</option>' + opt(r.ukuran && SZ.indexOf(r.ukuran) < 0 ? SZ.concat(r.ukuran) : SZ, r.ukuran) + '</select>' +
         '<input data-k="qty" class="qty" type="number" min="0" inputmode="numeric" value="' + e(r.qty) + '" aria-label="Jumlah">' +
-        (F.showHarga ? '<input data-k="harga" class="money harga' + (r._manual ? ' manual' : '') + '" inputmode="numeric" value="' + (r._manual && !U.num(r.harga) ? '0' : U.moneyVal(r._manual ? r.harga : g.harga + tambUk(r.ukuran))) + '" placeholder="0" aria-label="Harga">' : '') +
+        (F.showHarga ? '<input data-k="harga" class="money harga' + (r._manual ? ' manual' : '') + '" inputmode="numeric" value="' + (r._manual && !U.num(r.harga) ? '0' : U.moneyVal(r._manual ? r.harga : gPrice(g, r.ukuran))) + '" placeholder="0" aria-label="Harga">' : '') +
         '<button type="button" class="icon-btn del" data-act="del" aria-label="Hapus">✕</button></div>').join('') + '</div>' +
         '<button type="button" class="btn sm mt" data-act="add">+ Tambah orang</button>';
     }
@@ -225,6 +243,7 @@
         '<div class="row-btn wrap mt"><button type="button" class="btn sm" data-act="addGroup">+ Tambah kelompok</button>' +
         '<button type="button" class="btn sm" data-act="paste">📋 Tempel daftar dari WhatsApp</button></div>' +
         '<div id="panel"></div>' +
+        '<div id="extras">' + extrasHtml() + '</div>' +
         '<p class="hint">Kelompok dipakai kalau harganya beda, misalnya <i>Lengan Pendek</i> &amp; <i>Lengan Panjang</i>, atau <i>1 Set</i> &amp; <i>Atasan Saja</i>. ' +
         'Pilih <b>Daftar nama</b> untuk mengisi nama' + ' / nomor punggung — jumlah per ukuran otomatis jadi baris yang tinggal diisi. ' +
         'Nilai bawaan tambahan ukuran besar diatur di <a href="#/pengaturan">Pengaturan</a>.</p>';
@@ -417,6 +436,12 @@
         if (f === 'dpPersen') F.dpEdited = false;
         recalc(); return;
       }
+      if (t.dataset.xk) {
+        const xr = t.closest('.xrow'), x = F.extras[+xr.dataset.x];
+        x[t.dataset.xk] = t.dataset.xk === 'nama' ? t.value : U.num(t.value);
+        if (t.dataset.xk === 'harga') xr.querySelector('.gratis').classList.toggle('on', !U.num(t.value));
+        recalc(); return;
+      }
       if (t.dataset.tb) { F.tamb[t.dataset.tb] = U.num(t.value); refreshGroups(); return; }
       if (t.id === 'dpNom') { F.dpEdited = U.num(t.value) > 0; F.order.dpNominal = U.num(t.value); recalc(); return; }
       if (t.id === 'modalPcs') { F.modalPcs = U.num(t.value); recalc(); return; }
@@ -430,7 +455,7 @@
         if (t.dataset.gk === 'harga') {
           g.harga = U.num(t.value); g.sizeHarga = {}; g._zero = t.value.trim() !== '' && !g.harga;
           U.$$('.sz', gEl).forEach(d => { d.querySelector('small').textContent = U.fmt(priceFor(g, d.dataset.sz)); });
-          if (F.showHarga) g.rows.forEach((r, i) => { if (!r._manual) { const h = gEl.querySelector('.nrow[data-r="' + i + '"] [data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + tambUk(r.ukuran)); } });
+          if (F.showHarga) g.rows.forEach((r, i) => { if (!r._manual) { const h = gEl.querySelector('.nrow[data-r="' + i + '"] [data-k="harga"]'); if (h) h.value = U.moneyVal(gPrice(g, r.ukuran)); } });
           recalc(); return;
         }
         const sz = t.closest('.sz');
@@ -441,7 +466,7 @@
           r[k] = (k === 'qty' || k === 'harga') ? U.num(t.value) : t.value;
           if (k === 'harga') { r._manual = true; t.classList.add('manual'); }
           if (k === 'ukuran') t.classList.toggle('unk', t.value === M.UNK);
-          if (k === 'ukuran' && F.showHarga && !r._manual) { const h = row.querySelector('[data-k="harga"]'); if (h) h.value = U.moneyVal(g.harga + tambUk(r.ukuran)); }
+          if (k === 'ukuran' && F.showHarga && !r._manual) { const h = row.querySelector('[data-k="harga"]'); if (h) h.value = U.moneyVal(gPrice(g, r.ukuran)); }
           recalc();
         }
         return;
@@ -466,7 +491,7 @@
       if (ev.key !== 'Enter' || ev.target.tagName === 'TEXTAREA') return;
       ev.preventDefault();
       const row = ev.target.closest('.nrow');
-      if (!row) return;
+      if (!row || row.classList.contains('xrow')) return;
       const i = +row.dataset.r, k = ev.target.dataset.k;
       const gEl = row.closest('.grp');
       const gi = gEl ? +gEl.dataset.g : -1;
@@ -524,6 +549,12 @@
         const r = +b.closest('.nrow').dataset.r;
         if (gEl) { const g = F.groups[gi]; g.rows.splice(r, 1); if (!g.rows.length) g.rows.push(blankRow()); redrawGroup(gi); }
         else { F.rows.splice(r, 1); if (!F.rows.length) F.rows.push(blankItem()); drawQty(); }
+      } else if (act === 'addExtra') {
+        F.extras.push({ nama: b.dataset.nm || '', qty: 1, harga: 0 });
+        drawExtras();
+        const ins = U.$$('#extras .xrow [data-xk="' + (b.dataset.nm ? 'harga' : 'nama') + '"]', el); if (ins.length) { ins[ins.length - 1].focus(); ins[ins.length - 1].select(); }
+      } else if (act === 'delExtra') {
+        F.extras.splice(+b.closest('.xrow').dataset.x, 1); drawExtras();
       } else if (act === 'noTamb') {
         Object.keys(F.tamb).forEach(k => { F.tamb[k] = 0; });
         U.$$('[data-tb]', el).forEach(i => { i.value = '0'; });
@@ -589,7 +620,7 @@
         });
         return;
       }
-      const nol = its.filter(i => !i.harga);
+      const nol = its.filter(i => !i.harga && !M.isExtra(i));
       if (nol.length) {
         const ls = M.group(nol).map(g => (g.ket ? g.ket + ' – ' : '') + (g.ukuran !== '-' ? g.ukuran : 'item') + ' (' + g.qty + ' pcs)');
         U.confirm('Ada ' + nol.reduce((s2, i) => s2 + i.qty, 0) + ' pcs dengan harga Rp 0: ' + ls.join(', ') + '. Apakah memang gratis / harga khusus Rp 0? Item ini tetap tampil di invoice & WhatsApp.', 'Ya, simpan', () => doSave(ord, its));
@@ -600,7 +631,7 @@
 
     function doSave(ord, its) {
       const rows = its.map((r, i) => Object.assign({ id: U.uid(), orderId: ord.id, urut: i + 1 }, r));
-      const qty = its.reduce((s, r) => s + r.qty, 0);
+      const qty = its.filter(r => !M.isExtra(r)).reduce((s, r) => s + r.qty, 0);
       const expenses = F.expenses.filter(x => U.num(x.nominal) !== 0).map(x => ({
         id: x.id || U.uid(), tanggal: x.tanggal || ord.tanggal, orderId: ord.id, kategori: x.kategori || '', keterangan: x.keterangan || '', nominal: U.num(x.nominal), dibuat: x.dibuat || U.nowIso()
       }));
@@ -758,7 +789,7 @@
 
       '<section class="card"><div class="card-head"><h2>Rincian ' + (hasNames ? 'nama' : 'pesanan') + '</h2></div>' +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th>Nama</th>' + (withNo ? '<th class="c">No.</th>' : '') + '<th class="c">' + (o.pakaiUkuran === 'Y' ? 'Ukuran' : 'Varian') + '</th><th class="c">Qty</th><th class="r">Harga</th></tr></thead><tbody>' +
-      M.byGroup(c.items).map(gr => (gr.nama ? '<tr class="grow"><td colspan="' + (withNo ? 6 : 5) + '">' + e(gr.nama) + ' <span class="muted">(' + gr.items.reduce((s, i) => s + U.num(i.qty), 0) + ' pcs)</span></td></tr>' : '') +
+      M.byGroup(c.items.filter(i => !M.isExtra(i))).map(gr => (gr.nama ? '<tr class="grow"><td colspan="' + (withNo ? 6 : 5) + '">' + e(gr.nama) + ' <span class="muted">(' + gr.items.reduce((s, i) => s + U.num(i.qty), 0) + ' pcs)</span></td></tr>' : '') +
         gr.items.map((i, n) => '<tr><td>' + (n + 1) + '</td><td>' + e(i.nama || '-') + '</td>' + (withNo ? '<td class="c"><b>' + e(i.nomor || '-') + '</b></td>' : '') + '<td class="c">' + e(i.ukuran || '-') + '</td><td class="c">' + U.num(i.qty) + '</td><td class="r">' + U.rp(i.harga) + '</td></tr>').join('')).join('') +
       '</tbody></table></div></section>' +
 

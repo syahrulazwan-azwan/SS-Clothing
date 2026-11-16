@@ -41,7 +41,7 @@
     ordP.forEach(o => {
       const c = M.calc(o);
       omzet += c.total; pcs += c.qty; modal += c.modal;
-      if (o.pakaiUkuran === 'Y') c.items.filter(i => i.ukuran !== M.UNK).forEach(i => { const u = (i.ukuran || '-').toUpperCase(); sizes[u] = (sizes[u] || 0) + U.num(i.qty); });
+      if (o.pakaiUkuran === 'Y') c.items.filter(i => i.ukuran !== M.UNK && !M.isExtra(i)).forEach(i => { const u = (i.ukuran || '-').toUpperCase(); sizes[u] = (sizes[u] || 0) + U.num(i.qty); });
     });
     const operasional = d.expenses.filter(x => !x.orderId && inP(x.tanggal)).reduce((s, x) => s + U.num(x.nominal), 0);
     const masuk = d.payments.filter(x => inP(x.tanggal)).reduce((s, x) => s + U.num(x.nominal), 0);

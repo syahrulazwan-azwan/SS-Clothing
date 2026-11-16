@@ -3,6 +3,8 @@
   'use strict';
   const M = {};
   M.UNK = 'Menyusul';
+  M.EXTRA = 'Item tambahan';          // spanduk, bendera, dll. (tidak dihitung sebagai pcs baju)
+  M.isExtra = i => String(i.ket || '') === M.EXTRA;
   M.unkCount = items => items.filter(i => i.ukuran === M.UNK).reduce((s, i) => s + U.num(i.qty), 0);
   M.STATUS = ['Baru', 'Proses', 'Selesai', 'Diambil', 'Batal'];
   M.JENIS_BAYAR = ['DP', 'Pelunasan', 'Cicilan'];
@@ -74,7 +76,7 @@
 
   /** Hitung total dari order + daftar item (dipakai juga di form sebelum disimpan) */
   M.totals = function (o, items) {
-    const qty = items.reduce((s, i) => s + U.num(i.qty), 0);
+    const qty = items.filter(i => !M.isExtra(i)).reduce((s, i) => s + U.num(i.qty), 0);
     const subtotal = items.reduce((s, i) => s + U.num(i.qty) * U.num(i.harga), 0);
     const diskon = U.num(o.diskon), ongkir = U.num(o.ongkir);
     const total = subtotal - diskon + ongkir;
@@ -115,7 +117,7 @@
   /** Rekap jumlah per ukuran (tanpa harga) */
   M.sizeCount = function (items) {
     const m = {};
-    items.forEach(i => { const u = String(i.ukuran || '').trim() || '-'; m[u] = (m[u] || 0) + U.num(i.qty); });
+    items.filter(i => !M.isExtra(i)).forEach(i => { const u = String(i.ukuran || '').trim() || '-'; m[u] = (m[u] || 0) + U.num(i.qty); });
     return Object.keys(m).sort(M.sortSizes).map(u => ({ ukuran: u, qty: m[u] }));
   };
 
@@ -182,6 +184,8 @@
             L.push(k + '. ' + [i.nama || '.....', unk ? '.....' : i.ukuran, i.nomor || (pakaiNo && unk ? '.....' : '')].filter(Boolean).join(' | ') + (q > 1 ? ' | ' + q + ' pcs' : ''));
           } else if (unk) {
             for (let x = 0; x < q; x++) { k++; L.push(k + '. ..... | .....' + (pakaiNo ? ' | .....' : '')); }
+          } else if (M.isExtra(i)) {
+            L.push('- ' + i.ukuran + ' : ' + q + (U.num(i.harga) ? '' : ' (gratis)'));
           } else {
             L.push('- ' + (i.ukuran || '-') + (q > 1 ? ' : ' + q + ' pcs' : ''));
           }

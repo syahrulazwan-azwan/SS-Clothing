@@ -391,3 +391,10 @@ select.unk { color: #b45309; font-weight: 600; background: #fff7ed; }
 .tamb label { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .tamb .rp input { width: 104px; min-height: 34px; padding: 5px 8px 5px 24px; }
 .tamb .rp > span { left: 9px; }
+.extras { border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 10px 12px; margin-top: 12px; background: #fff; }
+.ex-h { margin-bottom: 8px; font-size: 14.5px; }
+.extras .nlist { margin-bottom: 8px; }
+.nlist.item .nrow.xrow { grid-template-columns: 24px minmax(0, 2fr) 70px 150px 32px 64px; }
+.gratis { font-size: 11px; font-weight: 800; color: #15803d; background: #dcfce7; border-radius: 6px; padding: 3px 6px; text-align: center; visibility: hidden; }
+.gratis.on { visibility: visible; }
+@media (max-width: 640px) { .nlist.item .nrow.xrow { grid-template-columns: 20px minmax(0, 1fr) 54px 28px; } .xrow .gratis { grid-column: 2 / 4; justify-self: start; } }
