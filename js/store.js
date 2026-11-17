@@ -64,6 +64,10 @@
         }
       });
       if (this.conf.url) this.sync();
+      // Ambil data terbaru tiap 60 detik selama aplikasi terbuka (agar HP & laptop tetap sama)
+      setInterval(() => {
+        if (this.conf.url && document.visibilityState === 'visible' && !this._busy && Date.now() - (this.lastSync || 0) > 55000) this.sync();
+      }, 15000);
     },
 
     get settings() { return Object.assign({}, DEFAULT_SETTINGS, this.data.settings || {}); },
@@ -147,6 +151,7 @@
     /** Kirim antrean + ambil data terbaru dalam SATU permintaan. */
     async sync() {
       if (!this.conf.url) { this._setState('lokal'); return; }
+      if (this._hold) return;            // sedang menunggu keputusan gabung data
       if (this._busy) { this._again = true; return; }
       if (!navigator.onLine) { this._setState('antre', 'Offline'); return; }
       this._busy = true;
@@ -185,6 +190,35 @@
       const js = JSON.parse(await res.text());
       if (!js.ok) throw new Error(js.error || 'Gagal');
       return js;
+    },
+
+    /** Hubungkan perangkat ini: cek koneksi, lalu cari data yang hanya ada di perangkat ini (belum ada di Spreadsheet). */
+    async connect(url, pin) {
+      await this.testConnection(url, pin);
+      this._hold = true;
+      this.setConf({ url: url, pin: pin });
+      const remote = Object.assign(emptyData(), (await this.request({ ops: [], pull: true })).data || {});
+      const has = (arr, id) => arr.some(r => String(r.id) === String(id));
+      const d = this.data;
+      const orders = d.orders.filter(o => !has(remote.orders, o.id));
+      const oid = {}; orders.forEach(o => { oid[o.id] = 1; });
+      const payments = d.payments.filter(p => !has(remote.payments, p.id) && (oid[p.orderId] || has(remote.orders, p.orderId)));
+      const expenses = d.expenses.filter(x => !x.orderId && !has(remote.expenses, x.id));
+      const settings = !Object.keys(remote.settings || {}).length && Object.keys(d.settings || {}).length ? d.settings : null;
+      return { orders: orders, payments: payments, expenses: expenses, settings: settings, count: orders.length + payments.length + expenses.length };
+    },
+
+    /** Gabungkan: kirim data yang hanya ada di perangkat ini, lalu muat semua data dari Spreadsheet. */
+    mergeUp(diff) {
+      const d = this.data, ops = [];
+      if (diff.settings) ops.push({ type: 'saveSettings', data: { settings: diff.settings } });
+      diff.orders.forEach(o => ops.push({ type: 'saveOrder', data: { order: o, items: d.items.filter(i => i.orderId === o.id), expenses: d.expenses.filter(x => x.orderId === o.id) } }));
+      diff.payments.forEach(p => ops.push({ type: 'savePayment', data: { payment: p } }));
+      diff.expenses.forEach(x => ops.push({ type: 'saveExpense', data: { expense: x } }));
+      this.queue = this.queue.concat(ops);
+      this.persist();
+      this._hold = false;
+      return this.sync();
     },
 
     /** Unggah seluruh data lokal ke spreadsheet (dipakai saat pertama kali menghubungkan). */

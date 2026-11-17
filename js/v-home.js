@@ -58,6 +58,7 @@
 
     el.innerHTML =
       '<div class="page-head"><h1>Ringkasan</h1>' + periodSelect('per', p) + '</div>' +
+      (!Store.conf.url ? '<a class="warnbar block" href="#/pengaturan">⚠ <b>Perangkat ini belum terhubung ke Spreadsheet</b> — data di sini tidak sama dengan HP/laptop lain. Ketuk untuk menghubungkan (URL + PIN di Pengaturan).</a>' : '') +
       (d.orders.length === 0 ? '<div class="empty-hero"><h2>Selamat datang 👋</h2><p>Mulai dengan mencatat pesanan pertama Anda, atau isi identitas usaha di Pengaturan.</p>' +
         '<div class="row-btn"><a class="btn primary" href="#/pesanan/baru">+ Pesanan baru</a><a class="btn" href="#/pengaturan">Pengaturan</a></div></div>' : '') +
       '<div class="stats">' +

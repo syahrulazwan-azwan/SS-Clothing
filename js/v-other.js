@@ -107,11 +107,13 @@
       '<label class="f span2">URL Aplikasi Web Apps Script<input id="cUrl" value="' + e(conn.url) + '" placeholder="https://script.google.com/macros/s/…/exec"></label>' +
       '<label class="f">PIN<input id="cPin" type="password" value="' + e(conn.pin) + '" placeholder="PIN di Code.gs"></label></div>' +
       '<div class="row-btn wrap"><button class="btn primary" data-act="connect">Simpan & hubungkan</button>' +
-      (conn.url ? '<button class="btn" data-act="syncNow">Sinkron sekarang</button><button class="btn" data-act="upload">Unggah ulang semua data lokal</button><button class="btn ghost danger" data-act="disconnect">Putuskan</button>' : '') + '</div>' +
+      (conn.url ? '<button class="btn" data-act="copyUrl">Salin URL (untuk HP)</button><button class="btn" data-act="syncNow">Sinkron sekarang</button><button class="btn" data-act="upload">Unggah ulang semua data lokal</button><button class="btn ghost danger" data-act="disconnect">Putuskan</button>' : '') + '</div>' +
       '<p class="hint">' + (Store.lastSync ? 'Sinkron terakhir: ' + new Date(Store.lastSync).toLocaleString('id-ID') + '. ' : '') +
       (Store.queue.length ? '<b>' + Store.queue.length + ' perubahan menunggu dikirim.</b> ' : '') +
       (Store.error ? '<span class="red-t">' + e(Store.error) + '</span> ' : '') +
-      'Semua perubahan langsung tampil di layar, lalu dikirim otomatis ke Spreadsheet di latar belakang.</p></section>' +
+      'Semua perubahan langsung tampil di layar, lalu dikirim otomatis ke Spreadsheet di latar belakang.</p>' +
+      '<div class="devhint"><b>Pakai di HP / perangkat lain?</b> Setiap perangkat perlu dihubungkan <u>satu kali</u>: buka aplikasi di HP → Pengaturan → tempel <b>URL yang sama</b> + ketik <b>PIN yang sama</b> → Simpan &amp; hubungkan. ' +
+      (conn.url ? 'Klik <b>Salin URL (untuk HP)</b>, kirim ke WhatsApp Anda sendiri, lalu salin di HP.' : '') + '</div></section>' +
 
       '<form id="sf">' +
       '<section class="card"><h2>Identitas usaha (kop nota)</h2><div class="fgrid">' +
@@ -211,28 +213,29 @@
         if (!/^https:\/\/script\.google(usercontent)?\.com\/.+/.test(url)) return U.toast('URL harus dari script.google.com dan berakhiran /exec', 'err');
         b.disabled = true; b.textContent = 'Menghubungkan…';
         try {
-          const res = await Store.testConnection(url, pin);
-          const prev = Store.conf.url;
-          Store.setConf({ url: url, pin: pin });
-          const remote = (await Store.request({ ops: [], pull: true })).data;
-          const remoteEmpty = !remote.orders.length && !Object.keys(remote.settings || {}).length;
-          const localHas = Store.data.orders.length || Object.keys(Store.data.settings || {}).length;
-          if (remoteEmpty && localHas && prev !== url) {
-            App.editing = false;
-            U.confirm('Terhubung! Spreadsheet masih kosong. Unggah data yang sudah ada di perangkat ini (' + Store.data.orders.length + ' pesanan) ke Spreadsheet?', 'Unggah', () => {
-              Store.uploadAll().then(() => U.toast('Data terunggah ke Spreadsheet', 'ok'));
-            });
-          } else {
-            await Store.sync();
-            U.toast('Terhubung ke Spreadsheet', 'ok');
-          }
+          const diff = await Store.connect(url, pin);
           App.editing = false;
-          App.render(true);
-          void res;
+          if (diff.count) {
+            U.confirm('Terhubung! Ada ' + diff.orders.length + ' pesanan' + (diff.payments.length ? ', ' + diff.payments.length + ' pembayaran' : '') + (diff.expenses.length ? ', ' + diff.expenses.length + ' pengeluaran' : '') +
+              ' di perangkat ini yang belum ada di Spreadsheet. Gabungkan ke Spreadsheet? (Jika tidak, perangkat ini akan memakai isi Spreadsheet saja.)', 'Ya, gabungkan',
+              () => Store.mergeUp(diff).then(() => { U.toast('Data digabung & tersinkron', 'ok'); App.render(true); }));
+            // Tombol Batal: pakai isi Spreadsheet
+            U.$('#dlg').addEventListener('close', function once() { U.$('#dlg').removeEventListener('close', once); if (Store._hold) { Store._hold = false; Store.sync().then(() => App.render(true)); } });
+          } else {
+            await Store.mergeUp(diff);
+            U.toast('Terhubung — ' + Store.data.orders.length + ' pesanan dimuat dari Spreadsheet', 'ok');
+            App.render(true);
+          }
         } catch (err) {
+          Store._hold = false;
           U.toast('Gagal terhubung: ' + (err.message || err), 'err');
           b.disabled = false; b.textContent = 'Simpan & hubungkan';
         }
+      }
+      else if (act === 'copyUrl') {
+        const t = Store.conf.url;
+        const done = () => U.toast('URL disalin. Kirim ke WhatsApp Anda sendiri, lalu tempel di HP.', 'ok');
+        if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, () => U.toast(t, 'info')); else U.toast(t, 'info');
       }
       else if (act === 'syncNow') { await Store.sync(); U.toast(Store.state === 'tersimpan' ? 'Sinkron selesai' : (Store.error || 'Belum selesai'), Store.state === 'tersimpan' ? 'ok' : 'err'); App.editing = false; App.render(true); }
       else if (act === 'upload') U.confirm('Kirim ulang seluruh data di perangkat ini ke Spreadsheet? (data yang sama akan ditimpa, tidak dobel)', 'Kirim', () => Store.uploadAll().then(() => U.toast('Selesai', 'ok')));
