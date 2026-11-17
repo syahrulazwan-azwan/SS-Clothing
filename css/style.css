@@ -406,3 +406,18 @@ select.unk { color: #b45309; font-weight: 600; background: #fff7ed; }
 @media (max-width: 640px) { .mu { grid-template-columns: 1fr 1fr; } .mu-l { grid-column: 1 / -1; } }
 .warnbar.block { display: block; color: #9a3412; text-decoration: none; }
 .devhint { margin-top: 12px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+/* Tanda tangan & stempel di nota */
+.p-line.p-ink { position: relative; height: 80px; }
+.p-ttd { position: absolute; left: 50%; bottom: 2px; transform: translateX(-42%); height: 64px; max-width: 130px; object-fit: contain; z-index: 2; }
+.p-cap { position: absolute; left: -6px; top: 8px; width: 82px; height: 82px; object-fit: contain; opacity: .8; transform: rotate(-14deg); z-index: 1; mix-blend-mode: multiply; }
+.paper-a5 .p-line.p-ink { height: 66px; } .paper-a5 .p-ttd { height: 52px; max-width: 110px; } .paper-a5 .p-cap { width: 66px; height: 66px; left: -4px; top: 6px; }
+.p-szl { font-size: .9em; color: #444; margin-top: 1px; }
+.print-opts .chips { margin: 4px 0 10px; }
+.sigs { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.sig-slot { display: flex; flex-direction: column; gap: 6px; }
+.sig-box { height: 130px; border: 1px dashed #cbd5e1; border-radius: 10px; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(#f3f4f6 0% 25%, #fff 0% 50%) 50% / 16px 16px; overflow: hidden; }
+.sig-box img { max-width: 92%; max-height: 118px; object-fit: contain; }
+.p-signs .p-line { height: 80px; }
+.paper-a5 .p-signs .p-line { height: 66px; }
+.p-sign { width: 150px; }
+.p-sign > div:last-child { white-space: normal; overflow: visible; font-size: .95em; }

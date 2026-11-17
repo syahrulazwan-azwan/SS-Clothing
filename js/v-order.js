@@ -784,6 +784,41 @@
       });
   };
 
+  V.printDialog = function (o, type, hasNames) {
+    const S = M.S();
+    const hasSig = !!(S.ttd || S.stempel);
+    let fmt = 'ukuran';
+    try { fmt = localStorage.getItem('cp_printfmt') || 'ukuran'; } catch (err) { }
+    const FMTS = [['ukuran', 'Per ukuran', 'Satu baris per ukuran (S, M, L, …) di tiap kelompok.'],
+      ['kelompok', 'Total per kelompok', 'Satu baris per kelompok (mis. 1 Set, Atasan Saja). Daftar ukuran ditulis di bawahnya.'],
+      ['total', 'Total semua baju', 'Satu baris total semua baju yang dipesan. Item tambahan (spanduk) tetap terpisah.']];
+    const isDoc = type !== 'rincian';
+    U.dialog('Cetak ' + Print.TYPES[type].toLowerCase().replace(/^\w/, ch => ch.toUpperCase()),
+      '<div class="print-opts"><div class="fgrid two"><label class="f">Tanggal di nota<input type="date" name="tgl" value="' + e(Print.defaultDate(o, type)) + '"></label></div>' +
+      (isDoc ? '<div class="lbl mt">Tampilan rincian baju</div><div class="chips wrap" id="pf">' + FMTS.map(f => '<button type="button" class="chip' + (f[0] === fmt ? ' on acc' : '') + '" data-fmt="' + f[0] + '">' + f[1] + '</button>').join('') + '</div><p class="hint" id="pfh"></p>' : '') +
+      (isDoc && hasNames ? '<label class="inline"><input type="checkbox" name="rinc" checked> Lampirkan daftar nama di halaman 2</label><br>' : '') +
+      (isDoc ? '<label class="inline mt"><input type="checkbox" name="ttd"' + (hasSig ? ' checked' : ' disabled') + '> Pakai tanda tangan &amp; stempel' + (hasSig ? '' : ' <small class="muted">(atur dulu di Pengaturan)</small>') + '</label>' : '') +
+      '</div>',
+      form => {
+        try { localStorage.setItem('cp_printfmt', fmt); } catch (err) { }
+        Print.print(o, type, { tanggal: form.tgl.value || Print.defaultDate(o, type), format: fmt, rincian: !!(form.rinc && form.rinc.checked), ttd: !!(form.ttd && form.ttd.checked) });
+      },
+      {
+        ok: 'Cetak / Simpan PDF',
+        onMount: form => {
+          const pf = form.querySelector('#pf'); if (!pf) return;
+          const hint = () => { form.querySelector('#pfh').textContent = (FMTS.find(f => f[0] === fmt) || FMTS[0])[2]; };
+          pf.addEventListener('click', ev => {
+            const b = ev.target.closest('[data-fmt]'); if (!b) return;
+            fmt = b.dataset.fmt;
+            U.$$('[data-fmt]', pf).forEach(x => { const on = x === b; x.classList.toggle('on', on); x.classList.toggle('acc', on); });
+            hint();
+          });
+          hint();
+        }
+      });
+  };
+
   V.orderDetail = function (el, params) {
     const o = M.order(params[0]);
     if (!o) { el.innerHTML = '<div class="empty">Pesanan tidak ditemukan (mungkin sudah dihapus). <a href="#/pesanan">Kembali ke daftar</a></div>'; return; }
@@ -809,14 +844,14 @@
       stat('Sisa', U.rp(Math.max(0, c.sisa)), c.sisa > 0 ? 'warn' : 'pos') + stat('Modal', U.rp(c.modal)) + stat('Laba', U.rp(c.laba), c.laba >= 0 ? 'pos' : 'neg') + '</div>' +
 
       '<section class="card print-card"><div class="card-head"><h2>Cetak / kirim</h2>' +
-      (hasNames ? '<label class="inline small"><input type="checkbox" id="withList" checked> Lampirkan rincian nama</label>' : '') + '</div>' +
+      '</div>' +
       '<div class="row-btn wrap">' +
       '<button class="btn" data-print="invoice">🧾 Invoice</button>' +
       '<button class="btn" data-print="dp">Nota DP</button>' +
       '<button class="btn" data-print="lunas">Nota Pelunasan</button>' +
       '<button class="btn" data-print="rincian">Rincian nama</button>' +
       '<button class="btn wa" data-act="wa">Kirim WhatsApp</button>' +
-      '</div><p class="hint">Di jendela cetak, pilih "Simpan sebagai PDF" untuk menyimpan file.</p></section>' +
+      '</div><p class="hint">Sebelum mencetak Anda bisa memilih tanggal nota, tampilan rincian, dan tanda tangan. Pilih "Simpan sebagai PDF" untuk menyimpan file.</p></section>' +
 
       '<div class="grid2">' +
       '<section class="card"><div class="card-head"><h2>Rekap per ukuran</h2><span class="pill">' + c.qty + ' pcs</span></div>' +
@@ -861,7 +896,7 @@
 
     el.addEventListener('click', ev => {
       const pb = ev.target.closest('[data-print]');
-      if (pb) { const w = U.$('#withList', el); Print.print(o, pb.dataset.print, { rincian: w ? w.checked : false }); return; }
+      if (pb) { V.printDialog(o, pb.dataset.print, hasNames); return; }
       const b = ev.target.closest('[data-act]');
       if (!b) return;
       const act = b.dataset.act, rid = b.dataset.id;

@@ -10,7 +10,7 @@
     rincian: 'RINCIAN PESANAN'
   };
 
-  function header(o, type, S) {
+  function header(o, type, S, tgl) {
     return '<div class="p-head">' +
       '<div class="p-brand">' +
       (S.logo ? '<img src="' + e(S.logo) + '" alt="">' : '') +
@@ -20,7 +20,7 @@
       '</div>' +
       '<div class="p-title"><div class="p-doc">' + P.TYPES[type] + '</div>' +
       '<table class="p-meta"><tr><td>No.</td><td><b>' + e(o.noNota) + '</b></td></tr>' +
-      '<tr><td>Tanggal</td><td>' + U.fdate(type === 'lunas' ? lastPayDate(o) : o.tanggal, true) + '</td></tr>' +
+      '<tr><td>Tanggal</td><td>' + U.fdate(tgl || P.defaultDate(o, type), true) + '</td></tr>' +
       (o.deadline ? '<tr><td>Selesai</td><td>' + U.fdate(o.deadline, true) + '</td></tr>' : '') +
       '</table></div></div>' +
       '<div class="p-to"><div><div class="p-lbl">Kepada</div><b>' + e(o.pelanggan) + '</b>' +
@@ -28,20 +28,59 @@
       '<div><div class="p-lbl">Pesanan</div><b>' + e(o.kategori || '-') + '</b><div>' + e(o.produk || '') + '</div></div></div>';
   }
 
-  function lastPayDate(o) {
+  function lastPayDate(o, jenis) {
     const c = M.calc(o);
-    return c.pays.length ? c.pays[c.pays.length - 1].tanggal : o.tanggal;
+    const ps = jenis ? c.pays.filter(p => p.jenis === jenis) : c.pays;
+    return ps.length ? ps[ps.length - 1].tanggal : '';
   }
+  /** Tanggal bawaan tiap dokumen (bisa diganti saat mencetak) */
+  P.defaultDate = function (o, type) {
+    if (type === 'lunas') return lastPayDate(o) || U.today();
+    if (type === 'dp') return lastPayDate(o, 'DP') || o.tanggal;
+    if (type === 'rincian') return U.today();
+    return o.tanggal || U.today();
+  };
 
-  function itemTable(o, c) {
-    const rows = M.group(c.items);
+  function itemTable(o, c, format) {
     const pakaiUk = o.pakaiUkuran === 'Y';
+    const all = M.group(c.items);
+    const extras = all.filter(g => g.ket === M.EXTRA);
+    const main = all.filter(g => g.ket !== M.EXTRA);
+    const szList = list => list.map(g => (g.ukuran === M.UNK ? 'menyusul' : g.ukuran) + ' ' + g.qty).join(', ');
+    let rows = [];
+    if (format === 'kelompok' || format === 'total') {
+      const by = {};
+      main.forEach(g => {
+        const k = (format === 'total' ? '' : g.ket) + '|' + g.harga;
+        if (!by[k]) by[k] = { ket: format === 'total' ? '' : g.ket, harga: g.harga, qty: 0, jumlah: 0, sz: [] };
+        by[k].qty += g.qty; by[k].jumlah += g.jumlah; by[k].sz.push(g);
+      });
+      let list = Object.values(by);
+      if (format === 'total' && list.length > 1) {
+        // harga berbeda-beda → tetap satu baris total
+        list = [{ ket: '', harga: null, qty: list.reduce((a, x) => a + x.qty, 0), jumlah: list.reduce((a, x) => a + x.jumlah, 0), sz: main }];
+      }
+      const judul = (o.kategori || 'Item') + (o.produk ? ' ' + o.produk : '');
+      rows = list.map(x => ({
+        desc: '<b>' + e(x.ket || judul) + '</b>' + (pakaiUk ? '<div class="p-szl">Ukuran: ' + e(szList(mergeSz(x.sz))) + '</div>' : ''),
+        qty: x.qty, harga: x.harga, jumlah: x.jumlah
+      }));
+    } else {
+      rows = main.map(g => ({
+        desc: e(g.ket || (pakaiUk ? (o.kategori || 'Item') : '')) + (g.ukuran !== '-' ? (g.ket || pakaiUk ? ' — ' : '') + '<b>' + (pakaiUk ? 'Ukuran ' : '') + e(g.ukuran) + '</b>' : ''),
+        qty: g.qty, harga: g.harga, jumlah: g.jumlah
+      }));
+    }
+    rows = rows.concat(extras.map(g => ({ desc: '<b>' + e(g.ukuran) + '</b>' + (g.harga ? '' : ' <small>(bonus)</small>'), qty: g.qty, harga: g.harga, jumlah: g.jumlah })));
+    const hargaTxt = h => h === null ? '<small>beragam</small>' : h ? U.rp(h) : 'Rp 0 <small>(gratis)</small>';
     return '<table class="p-table"><thead><tr><th class="c">No</th><th>Deskripsi</th><th class="c">Qty</th><th class="r">Harga Satuan</th><th class="r">Jumlah</th></tr></thead><tbody>' +
-      rows.map((g, i) => '<tr><td class="c">' + (i + 1) + '</td><td>' + (g.ket === M.EXTRA ? '<b>' + e(g.ukuran) + '</b>' + (g.harga ? '' : ' <small>(bonus)</small>') :
-        e(g.ket || (pakaiUk ? (o.kategori || 'Item') : '')) +
-        (g.ukuran !== '-' ? (g.ket || pakaiUk ? ' — ' : '') + '<b>' + (pakaiUk ? 'Ukuran ' : '') + e(g.ukuran) + '</b>' : '')) + '</td>' +
-        '<td class="c">' + g.qty + '</td><td class="r">' + (g.harga ? U.rp(g.harga) : 'Rp 0 <small>(gratis)</small>') + '</td><td class="r">' + U.rp(g.jumlah) + '</td></tr>').join('') +
-      '</tbody><tfoot><tr><td></td><td><b>Jumlah</b></td><td class="c"><b>' + c.qty + '</b></td><td></td><td class="r"><b>' + U.rp(c.subtotal) + '</b></td></tr></tfoot></table>';
+      rows.map((r, i) => '<tr><td class="c">' + (i + 1) + '</td><td>' + r.desc + '</td><td class="c">' + r.qty + '</td><td class="r">' + hargaTxt(r.harga) + '</td><td class="r">' + U.rp(r.jumlah) + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><td></td><td><b>Total baju: ' + c.qty + ' pcs</b></td><td class="c"><b>' + c.qty + '</b></td><td></td><td class="r"><b>' + U.rp(c.subtotal) + '</b></td></tr></tfoot></table>';
+  }
+  function mergeSz(list) {
+    const m = {};
+    list.forEach(g => { m[g.ukuran] = (m[g.ukuran] || 0) + g.qty; });
+    return Object.keys(m).sort(M.sortSizes).map(u => ({ ukuran: u, qty: m[u] }));
   }
 
   function sumRows(list) {
@@ -66,6 +105,9 @@
   }
 
   function footer(o, S, opts) {
+    const sig = opts.ttd && (S.ttd || S.stempel)
+      ? '<div class="p-line p-ink">' + (S.stempel ? '<img class="p-cap" src="' + e(S.stempel) + '" alt="">' : '') + (S.ttd ? '<img class="p-ttd" src="' + e(S.ttd) + '" alt="">' : '') + '</div>'
+      : '<div class="p-line"></div>';
     return '<div class="p-foot">' +
       '<div class="p-notes">' +
       (opts.bank && S.rekening ? '<div class="p-lbl">Pembayaran ke</div><div class="p-bank">' + e(S.rekening).replace(/\n/g, '<br>') + '</div>' : '') +
@@ -73,7 +115,7 @@
       '</div>' +
       '<div class="p-signs">' +
       '<div class="p-sign"><div>Penerima,</div><div class="p-line"></div><div>' + e(o.pelanggan) + '</div></div>' +
-      '<div class="p-sign"><div>Hormat kami,</div><div class="p-line"></div><div>' + e(S.penandatangan || S.namaUsaha) + '</div></div>' +
+      '<div class="p-sign"><div>Hormat kami,</div>' + sig + '<div>' + e(S.penandatangan || S.namaUsaha) + '</div></div>' +
       '</div></div>';
   }
 
@@ -94,7 +136,7 @@
   P.build = function (o, type, opts) {
     opts = opts || {};
     const S = M.S(), c = M.calc(o);
-    let body = header(o, type, S);
+    let body = header(o, type, S, opts.tanggal);
 
     if (type === 'rincian') {
       body += rincianTable(o, c);
@@ -102,7 +144,7 @@
       return '<div class="p-page">' + body + '</div>';
     }
 
-    body += itemTable(o, c);
+    body += itemTable(o, c, opts.format || 'ukuran');
     let sums = baseTotals(c), stamp = '', words = '';
     if (type === 'invoice') {
       sums = sums.concat([
@@ -133,11 +175,11 @@
       (stamp ? '<div class="p-stamp ' + (stamp === 'LUNAS' ? 'ok' : '') + '">' + stamp + '</div>' : '') +
       '</div><div class="p-right">' + sumRows(sums) + '</div></div>';
     if (o.catatan) body += '<div class="p-note">Catatan: ' + e(o.catatan) + '</div>';
-    body += footer(o, S, { bank: type !== 'lunas' && c.sisa > 0 });
+    body += footer(o, S, { bank: type !== 'lunas' && c.sisa > 0, ttd: opts.ttd !== false });
 
     let html = '<div class="p-page">' + body + '</div>';
     if (opts.rincian && c.items.some(i => i.nama || i.nomor)) {
-      html += '<div class="p-page p-break">' + header(o, 'rincian', S) + rincianTable(o, c) + '</div>';
+      html += '<div class="p-page p-break">' + header(o, 'rincian', S, opts.tanggal) + rincianTable(o, c) + '</div>';
     }
     return html;
   };

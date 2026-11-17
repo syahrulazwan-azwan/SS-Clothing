@@ -97,6 +97,12 @@
   V.settings = function (el) {
     const S = M.S();
     let logo = S.logo || '';
+    const imgs = { ttd: S.ttd || '', stempel: S.stempel || '' };
+    const slot = (k, label, hint) => '<div class="sig-slot" data-slot="' + k + '"><div class="lbl">' + label + '</div>' +
+      '<div class="sig-box">' + (imgs[k] ? '<img src="' + e(imgs[k]) + '" alt="">' : '<span class="muted">Belum ada</span>') + '</div>' +
+      '<div class="row-btn wrap"><label class="btn sm">Pilih gambar<input type="file" accept="image/*" data-img="' + k + '" hidden></label>' +
+      '<button type="button" class="btn sm ghost" data-rot="' + k + '">Putar 90° ↻</button>' +
+      '<button type="button" class="btn sm ghost danger" data-del="' + k + '">Hapus</button></div><small class="hint">' + hint + '</small></div>';
     const f = (key, label, attrs, cls) => '<label class="f ' + (cls || '') + '">' + label + '<input data-s="' + key + '" value="' + e(S[key]) + '" ' + (attrs || '') + '></label>';
     const ta = (key, label, rows, cls, hint) => '<label class="f ' + (cls || '') + '">' + label + '<textarea data-s="' + key + '" rows="' + (rows || 2) + '">' + e(S[key]) + '</textarea>' + (hint ? '<small class="hint">' + hint + '</small>' : '') + '</label>';
     const conn = Store.conf;
@@ -126,6 +132,10 @@
       f('penandatangan', 'Nama penandatangan') + f('prefixNota', 'Awalan nomor nota', 'placeholder="INV"') +
       '<label class="f">Ukuran kertas<select data-s="kertas"><option' + (S.kertas !== 'A5' ? ' selected' : '') + '>A4</option><option' + (S.kertas === 'A5' ? ' selected' : '') + '>A5</option></select></label>' +
       '</div></section>' +
+
+      '<section class="card"><h2>Tanda tangan &amp; stempel (untuk nota)</h2>' +
+      '<p class="hint top">Muncul di bagian "Hormat kami" pada invoice dan nota. Disimpan di Spreadsheet Anda — <b>tidak</b> ikut ke GitHub. Latar putih otomatis dibuat transparan.</p>' +
+      '<div class="sigs">' + slot('ttd', 'Tanda tangan', 'Foto/scan tanda tangan di kertas putih.') + slot('stempel', 'Stempel', 'Stempel bulat/kotak, latar putih atau transparan.') + '</div></section>' +
 
       '<details class="card more"><summary>Pengaturan lanjutan <small class="muted">— DP default, daftar ukuran, harga tambahan ukuran, kategori</small></summary><div class="fgrid">' +
       f('dpPersen', 'DP default (%)', 'type="number" min="0" max="100"') +
@@ -158,6 +168,8 @@
       const s = Object.assign({}, Store.data.settings || {});
       U.$$('[data-s]', sf).forEach(i => { s[i.dataset.s] = i.value.trim(); });
       s.logo = logo;
+      s.ttd = imgs.ttd;
+      s.stempel = imgs.stempel;
       Store.op('saveSettings', { settings: s });
       App.dirty = false;
       U.toast('Pengaturan tersimpan', 'ok');
@@ -165,27 +177,62 @@
       App.render(true);
     });
 
-    U.$('#logoFile', el).addEventListener('change', ev => {
-      const file = ev.target.files[0]; if (!file) return;
-      const img = new Image();
-      img.onload = () => {
-        let out = '';
-        for (const size of [220, 180, 140, 100]) {
-          const cv = document.createElement('canvas');
-          const r = Math.min(1, size / Math.max(img.width, img.height));
-          cv.width = Math.round(img.width * r); cv.height = Math.round(img.height * r);
-          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-          out = cv.toDataURL('image/png');
-          if (out.length > 45000) out = cv.toDataURL('image/webp', 0.85);
-          if (out.length <= 45000) break;
+    /** Olah gambar: perkecil, latar putih → transparan (opsional), putar; hasil ≤ 45.000 karakter agar muat di 1 sel Spreadsheet */
+    function loadImg(src) { return new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; }); }
+    function readFile(file) { return new Promise(ok => { const r = new FileReader(); r.onload = () => ok(r.result); r.readAsDataURL(file); }); }
+    async function processImg(src, o) {
+      const img = await loadImg(src);
+      if (!o.rotate && !o.force && src.length <= 45000 && Math.max(img.width, img.height) <= 700) return src;
+      for (const size of [o.max, o.max * 0.8, o.max * 0.65, o.max * 0.5]) {
+        const r = Math.min(1, size / Math.max(img.width, img.height));
+        const w = Math.round(img.width * r), h = Math.round(img.height * r);
+        const cv = document.createElement('canvas');
+        cv.width = o.rotate ? h : w; cv.height = o.rotate ? w : h;
+        const cx = cv.getContext('2d');
+        if (o.rotate) { cx.translate(h, 0); cx.rotate(Math.PI / 2); }   // putar ke kanan 90°
+        cx.drawImage(img, 0, 0, w, h);
+        if (o.transparent) {
+          const d = cx.getImageData(0, 0, cv.width, cv.height), p = d.data;
+          for (let i = 0; i < p.length; i += 4) {
+            const lum = (p[i] + p[i + 1] + p[i + 2]) / 3;
+            if (lum > 215) p[i + 3] = 0; else p[i + 3] = Math.min(p[i + 3], Math.round((255 - lum) * 1.6));
+          }
+          cx.putImageData(d, 0, 0);
         }
-        if (out.length > 45000) return U.toast('Gambar terlalu besar, gunakan logo yang lebih sederhana', 'err');
-        logo = out;
+        let out = cv.toDataURL('image/png');
+        if (out.length > 45000) { const wb = cv.toDataURL('image/webp', 0.85); if (wb.indexOf('data:image/webp') === 0) out = wb; }
+        if (out.length <= 45000) return out;
+      }
+      throw new Error('Gambar terlalu besar/rumit, coba gambar lain');
+    }
+
+    U.$('#logoFile', el).addEventListener('change', async ev => {
+      const file = ev.target.files[0]; if (!file) return;
+      try {
+        logo = await processImg(await readFile(file), { max: 220, force: true });
         U.$('.logo-box', el).innerHTML = '<img id="logoImg" src="' + logo + '">';
         App.dirty = true;
         U.toast('Logo siap, klik Simpan pengaturan', 'info');
-      };
-      img.src = URL.createObjectURL(file);
+      } catch (err) { U.toast(err.message, 'err'); }
+    });
+
+    const showSlot = k => { U.$('.sig-slot[data-slot="' + k + '"] .sig-box', el).innerHTML = imgs[k] ? '<img src="' + imgs[k] + '" alt="">' : '<span class="muted">Belum ada</span>'; };
+    el.addEventListener('change', async ev => {
+      const k = ev.target.dataset && ev.target.dataset.img; if (!k) return;
+      const file = ev.target.files[0]; if (!file) return;
+      try {
+        const raw = await readFile(file);
+        imgs[k] = await processImg(raw, { max: 480, transparent: !/^data:image\/(png|webp)/.test(raw) || raw.length > 45000, force: false });
+        showSlot(k); App.dirty = true;
+        U.toast((k === 'ttd' ? 'Tanda tangan' : 'Stempel') + ' siap — klik Simpan pengaturan', 'info');
+      } catch (err) { U.toast(err.message, 'err'); }
+      ev.target.value = '';
+    });
+    el.addEventListener('click', async ev => {
+      const r = ev.target.closest('[data-rot]'), d = ev.target.closest('[data-del]');
+      if (r && imgs[r.dataset.rot]) {
+        try { imgs[r.dataset.rot] = await processImg(imgs[r.dataset.rot], { max: 480, rotate: true }); showSlot(r.dataset.rot); App.dirty = true; } catch (err) { U.toast(err.message, 'err'); }
+      } else if (d) { imgs[d.dataset.del] = ''; showSlot(d.dataset.del); App.dirty = true; }
     });
 
     U.$('#impFile', el).addEventListener('change', ev => {
